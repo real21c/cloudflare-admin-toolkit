@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>설정 · Cloudflare Admin Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shell.css">
+<style>
+  .swrap { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .ssec { margin-top: 22px; }
+  .ssec:first-child { margin-top: 4px; }
+  .ssec h2 { font-size: 15px; font-weight: 650; margin: 0 0 2px; }
+  .ssec .shp { color: var(--dim); font-size: 12.5px; margin-bottom: 8px; }
+  .scard { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .srow { display: flex; gap: 20px; padding: 16px 18px; border-bottom: 1px solid var(--line-soft); align-items: flex-start; }
+  .srow:last-child { border-bottom: none; }
+  .srow.dirty { background: var(--cf-blue-bg); }
+  .sl { flex: 0 0 280px; }
+  .sl .nm { font-weight: 600; font-size: 13.5px; }
+  .sl .nm .mark { margin-left: 6px; font-size: 11px; font-weight: 500; padding: 1px 6px; background: var(--cf-orange-bg); color: var(--cf-orange-dk); }
+  .sl .hp { color: var(--dim); font-size: 12.5px; margin-top: 4px; line-height: 1.5; }
+  .sc { flex: 1; min-width: 0; }
+  .sc input[type=text] { width: 260px; max-width: 100%; }
+  .sc .unit { margin-left: 6px; color: var(--dim); font-size: 13px; }
+  .sc .def { margin-top: 6px; font-size: 12px; color: var(--dimmer); }
+  .sc .def b { color: var(--dim); font-weight: 500; }
+  .sc .def button { margin-left: 8px; }
+  .sc .err { color: var(--red); font-size: 12.5px; margin-top: 6px; }
+  .gseg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .gseg button.on { background: var(--cf-orange); border-color: var(--cf-orange); color: #fff; font-weight: 600; }
+  .sfoot { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 14px; }
+  .sfoot .msg { margin-right: auto; font-size: 13px; color: var(--dim); }
+  .sfoot .msg.ok { color: var(--green); }
+  .sfoot .msg.bad { color: var(--red); }
+  @media (max-width: 800px) { .srow { flex-direction: column; gap: 10px; } .sl { flex: none; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#f6821f" d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+    </svg>
+    Cloudflare Admin Toolkit
+  </span>
+  <span class="grow"></span>
+  <button class="tiny hide" id="btnOtp" title="로그인할 때 구글 OTP 6자리를 함께 받습니다">2단계 인증</button>
+  <button class="tiny hide" id="btnLogout">로그아웃</button>
+</div>
+
+<div class="app">
+<nav id="side" class="side"></nav>
+<main class="main">
+<div class="swrap">
+  <h1>설정 <span class="chip" id="ver" hidden></span></h1>
+  <div class="sub">화면에서 바꾼 값만 저장되고, 나머지는 기본값(wrangler.jsonc)을 씁니다. 토큰·비밀번호 같은 비밀값은 여기서 바꾸지 않습니다. 처음 설치하는 방법은 <a class="link" href="/help.html">도움말</a>.</div>
+  <div id="notice" class="notice hide"></div>
+  <div id="rows"><div class="scard"><div class="empty">불러오는 중…</div></div></div>
+  <div class="sfoot">
+    <span class="msg" id="msg"></span>
+    <button class="ghost" id="btnUndo" disabled>되돌리기</button>
+    <button class="primary" id="btnSave" disabled>저장</button>
+  </div>
+</div>
+</main>
+</div>
+
+<script type="module">
+import { $, el, setBusyCheck } from '/shell.js';
+
+let S = null;          // 서버 상태 { fields, defaults, saved, values, canEdit, groups }
+let edits = {};        // key → 새 값(문자열) 또는 null(기본값으로)
+let saving = false;
+setBusyCheck(() => saving);
+
+async function api(method, body) {
+  const r = await fetch('/api/settings', { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) { location.href = '/login'; throw new Error('세션이 만료되었습니다.'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || j.message || ('HTTP ' + r.status));
+  return j;
+}
+
+const show = (v) => (v === '' || v == null ? '(없음)' : String(v));
+// 저장하면 쓰일 값 — 편집 중이면 그 값, '기본값으로' 면 기본값, 아니면 지금 값
+function pending(key) {
+  if (key in edits) return edits[key] === null ? S.defaults[key] : edits[key];
+  return S.values[key];
+}
+const typeOf = (key) => (S.fields.find((f) => f.key === key) || {}).type;
+function norm(key, v) {
+  const s = String(v == null ? '' : v).trim();
+  const t = typeOf(key);
+  if (t === 'int' && /^\d+$/.test(s)) return String(Number(s));
+  if (t === 'domain') return s.toLowerCase().replace(/\.$/, '');
+  if (t === 'ip') return s.toLowerCase();
+  return s;
+}
+function isDirty(key) {
+  if (!(key in edits)) return false;
+  if (edits[key] === null) return S.saved[key] !== undefined;
+  return norm(key, edits[key]) !== norm(key, S.values[key]);
+}
+const dirtyKeys = () => S.fields.map((f) => f.key).filter(isDirty);
+
+function render() {
+  const root = $('#rows');
+  root.innerHTML = '';
+  // 묶음(DNS · SSL/TLS · IP Rules · 로그인 · 보안)마다 제목 + 카드
+  const cards = {};
+  for (const sec of S.sections) {
+    if (!S.fields.some((f) => f.section === sec.key)) continue;
+    const wrap = el('div', 'ssec');
+    wrap.append(el('h2', null, sec.label), el('div', 'shp', sec.help));
+    const card = el('div', 'scard');
+    wrap.append(card);
+    root.append(wrap);
+    cards[sec.key] = card;
+  }
+  for (const f of S.fields) {
+    const box = cards[f.section] || root;
+    const row = el('div', 'srow' + (isDirty(f.key) ? ' dirty' : ''));
+    const l = el('div', 'sl');
+    const nm = el('div', 'nm');
+    fillName(nm, f);
+    l.append(nm, el('div', 'hp', f.help));
+    const c = el('div', 'sc');
+    const val = pending(f.key);
+    const def = el('div', 'def');
+
+    if (f.type === 'group') {
+      const seg = el('div', 'gseg');
+      const names = S.groups.slice().sort((a, b) => a.localeCompare(b, 'ko'));
+      if (val && !names.includes(val)) names.unshift(val);
+      for (const g of names) {
+        const b = el('button', g === val ? 'on' : '', g);
+        b.disabled = !S.canEdit || saving;
+        b.onclick = () => { edits[f.key] = g; render(); };
+        seg.append(b);
+      }
+      if (!names.length) seg.append(el('span', 'unit', '그룹이 없습니다 (DNS · SSL/TLS 에서 만들 수 있음)'));
+      c.append(seg);
+    } else {
+      const inp = el('input');
+      inp.type = 'text';
+      inp.value = val == null ? '' : String(val);
+      if (f.type === 'int') { inp.inputMode = 'numeric'; inp.style.width = '120px'; }
+      inp.disabled = !S.canEdit || saving;
+      inp.oninput = () => {
+        edits[f.key] = inp.value;
+        row.classList.toggle('dirty', isDirty(f.key));
+        fillName(nm, f); fillDef(def, f);
+        updateButtons();
+      };
+      c.append(inp);
+      if (f.unit) c.append(el('span', 'unit', f.unit + (f.type === 'int' ? ' (' + f.min + '~' + f.max + ')' : '')));
+    }
+
+    c.append(def);
+    fillDef(def, f);
+    row.append(l, c);
+    box.append(row);
+  }
+  updateButtons();
+}
+
+// '바꾼 값' 표시 — 저장된 바꾼 값이 있고, '기본값으로' 를 누르지 않았을 때
+function fillName(nm, f) {
+  nm.textContent = f.label;
+  if (S.saved[f.key] !== undefined && edits[f.key] !== null) nm.append(el('span', 'mark', '바꾼 값'));
+}
+// 기본값 줄 — '기본값으로' 는 저장된 바꾼 값이 있거나 입력칸을 고쳤을 때
+function fillDef(def, f) {
+  def.textContent = '기본값 ';
+  def.append(el('b', null, show(S.defaults[f.key]) + (f.unit || '')));
+  const canReset = S.saved[f.key] !== undefined ? edits[f.key] !== null : isDirty(f.key);
+  if (S.canEdit && !saving && canReset) {
+    const r = el('button', 'tiny ghost', '기본값으로');
+    r.onclick = () => { edits[f.key] = S.saved[f.key] !== undefined ? null : undefined; if (edits[f.key] === undefined) delete edits[f.key]; render(); };
+    def.append(r);
+  }
+}
+
+function updateButtons() {
+  const n = dirtyKeys().length;
+  $('#btnSave').disabled = !S.canEdit || n === 0 || saving;
+  $('#btnUndo').disabled = n === 0 || saving;
+}
+
+function setMsg(text, cls) { const m = $('#msg'); m.textContent = text || ''; m.className = 'msg' + (cls ? ' ' + cls : ''); }
+
+async function load() {
+  try {
+    S = await api('GET');
+    edits = {};
+    if (S.version) { const v = $('#ver'); v.textContent = 'v' + S.version; v.hidden = false; }
+    if (!S.canEdit) {
+      const n = $('#notice');
+      n.className = 'notice amber';
+      n.textContent = '설정은 관리자(OTP 를 처음 등록한 사람)만 바꿀 수 있습니다. 지금 값만 볼 수 있습니다.';
+    }
+    render();
+  } catch (e) {
+    $('#rows').innerHTML = '';
+    $('#rows').append(el('div', 'empty', '불러오기 실패: ' + e.message));
+  }
+}
+
+$('#btnUndo').onclick = () => { edits = {}; setMsg(''); render(); };
+$('#btnSave').onclick = async () => {
+  const keys = dirtyKeys();
+  if (!keys.length) return;
+  const byKey = Object.fromEntries(S.fields.map((f) => [f.key, f]));
+  const secName = (f) => (S.sections.find((s) => s.key === f.section) || {}).label;
+  const lines = keys.map((k) => secName(byKey[k]) + ' › ' + byKey[k].label + ': ' + show(S.values[k]) + ' → ' + show(pending(k)) + (edits[k] === null ? ' (기본값으로)' : ''));
+  if (!confirm('설정을 바꿉니다.\n\n' + lines.join('\n') + '\n\n진행할까요?')) return;
+  const changes = {};
+  for (const k of keys) changes[k] = edits[k] === null ? null : String(edits[k]).trim();
+  saving = true; render(); setMsg('저장 중…');
+  try {
+    const res = await api('PUT', { changes });
+    S = res;
+    for (const k of keys) {
+      const sent = changes[k];
+      if (edits[k] === null ? sent === null : String(edits[k]).trim() === sent) delete edits[k];
+    }
+    // 6) 서버가 실제로 바꾼 건수로 알린다
+    const msg = res.changed ? '저장했습니다. 다른 화면은 새로고침하면 적용됩니다.' : '바뀐 값이 없습니다 (같은 값).';
+    setMsg(msg + (res.logError ? ' — ' + res.logError : ''), res.logError ? 'bad' : 'ok');
+  } catch (e) {
+    setMsg(e.message, 'bad');
+  } finally {
+    saving = false; render();
+  }
+};
+window.addEventListener('beforeunload', (e) => { if (S && dirtyKeys().length) { e.preventDefault(); e.returnValue = ''; } });
+
+load();
+</script>
+</body>
+</html>

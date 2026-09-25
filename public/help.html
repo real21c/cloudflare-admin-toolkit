@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>도움말 · Cloudflare Admin Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shell.css">
+<style>
+  .hwrap { max-width: 900px; margin: 0 auto; padding: 20px; font-size: 14px; line-height: 1.65; }
+  .hwrap h2 { font-size: 16px; font-weight: 650; margin: 30px 0 8px; padding-top: 4px; scroll-margin-top: 60px; }
+  .hwrap h2 .no { display: inline-block; min-width: 24px; color: var(--cf-orange); }
+  .hwrap h3 { font-size: 14px; font-weight: 650; margin: 16px 0 6px; }
+  .hwrap p { margin: 6px 0; }
+  .hwrap ul, .hwrap ol { margin: 6px 0; padding-left: 22px; }
+  .hwrap li { margin: 3px 0; }
+  .hwrap code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; background: var(--line-soft); padding: 1px 5px; }
+  .card { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 14px 18px; margin: 10px 0; }
+  .toc { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 18px; padding-left: 0; list-style: none; }
+  .toc a { color: var(--cf-blue); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc .no { display: inline-block; min-width: 22px; color: var(--dim); }
+  .warn { border-left: 3px solid var(--amber); background: var(--amber-bg); padding: 10px 14px; margin: 10px 0; }
+  .warn b { font-weight: 650; }
+  .tbl { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); font-size: 13px; margin: 8px 0; }
+  .tbl th { text-align: left; font-weight: 600; background: var(--bg); color: var(--dim); font-size: 12px; }
+  .tbl th, .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl td:first-child { white-space: nowrap; }
+  .tscroll { overflow-x: auto; }
+  .need { font-size: 11px; font-weight: 600; padding: 1px 6px; background: var(--red-bg); color: var(--red); white-space: nowrap; }
+  .opt { font-size: 11px; font-weight: 600; padding: 1px 6px; background: var(--line-soft); color: var(--dim); white-space: nowrap; }
+  .yes { color: var(--green); font-weight: 600; }
+  .pre { position: relative; margin: 8px 0; }
+  .pre pre { margin: 0; background: #1f1f1f; color: #e6e6e6; padding: 12px 14px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .pre pre .c { color: #8c8c8c; }
+  .pre button { position: absolute; top: 6px; right: 6px; background: #333; color: #ddd; border-color: #444; }
+  .pre button:hover:not(:disabled) { background: #444; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; font-size: 13px; }
+  .flow span { background: var(--panel); border: 1px solid var(--line); padding: 4px 9px; }
+  .flow span.hand { border-color: var(--cf-orange); background: var(--cf-orange-bg); }
+  .flow i { color: var(--dimmer); font-style: normal; }
+  .dl { display: inline-block; margin-left: 6px; padding: 2px 10px; background: var(--cf-orange); color: #fff; text-decoration: none; font-size: 12.5px; font-weight: 600; }
+  .dl:hover { background: var(--cf-orange-dk); }
+  .dim { color: var(--dim); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#f6821f" d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+    </svg>
+    Cloudflare Admin Toolkit
+  </span>
+  <span class="grow"></span>
+  <button class="tiny hide" id="btnOtp" title="로그인할 때 구글 OTP 6자리를 함께 받습니다">2단계 인증</button>
+  <button class="tiny hide" id="btnLogout">로그아웃</button>
+</div>
+
+<div class="app">
+<nav id="side" class="side"></nav>
+<main class="main">
+<div class="hwrap">
+  <h1>도움말 — Cloudflare 에 설치하기</h1>
+  <div class="sub">이 도구를 새 Cloudflare 계정에 처음 설치하는 방법입니다. 명령 하나로 설치하는 방법과, 무엇을 만들고 변수 · 시크릿에 어떤 이름과 값을 넣는지 정리했습니다.</div>
+
+  <div class="card">
+    <b>만드는 것</b>
+    <ul>
+      <li><b>API 토큰</b> — 관리할 도메인이 있는 계정에서 발급. 도구가 도메인·IP 룰을 바꿀 때 쓰는 열쇠</li>
+      <li><b>Worker 1개</b> — 이 도구의 코드와 화면 (<code>src/</code>, <code>public/</code>)</li>
+      <li><b>KV 1개</b> — 그룹 · 상태 캐시 · 변경 이력 · OTP 목록 · IP 분류 규칙 · 설정 값을 저장</li>
+      <li><b>변수</b> — 대상 서버 IP 같은 보통 값. <code>wrangler.jsonc</code> 파일에 적는다</li>
+      <li><b>시크릿</b> — 토큰 · 비밀번호처럼 숨길 값. 파일에 적지 않고 명령으로 넣는다</li>
+    </ul>
+    <p>모두 <b>무료 요금제</b>로 됩니다 (Workers 하루 10만 요청, KV 쓰기 하루 1,000회).</p>
+  </div>
+
+  <h2 id="quick">빠른 설치 — 명령 하나</h2>
+  <p>대시보드에서 하나씩 만들 필요 없이, 샘플 파일의 빈 칸을 채우고 명령 하나를 실행하면 됩니다. 대시보드에서 직접 하는 일은 <b>API 토큰 만들기</b>뿐입니다.</p>
+  <div class="flow">
+    <span class="hand">① API 토큰 (대시보드)</span><i>→</i>
+    <span>② 샘플 파일 → setup.env</span><i>→</i>
+    <span>③ 빈 칸 채우기</span><i>→</i>
+    <span>④ node setup.mjs</span>
+  </div>
+  <ol>
+    <li><b>API 토큰 만들기</b> — <a class="link" href="#s1">1단계</a> 표의 권한으로</li>
+    <li><b>샘플 파일</b>을 소스 폴더에 <code>setup.env</code> 로 저장 <a class="dl" href="/setup.example.env" download="setup.env">샘플 파일 내려받기</a>
+      <br><span class="dim">또는 소스 폴더에서 <code>node setup.mjs --init</code> — 샘플은 모두 빈 칸입니다</span></li>
+    <li><code>setup.env</code> 의 빈 칸 채우기 — 필수는 <code>WORKER_NAME</code> · <code>CF_API_TOKEN</code> · <code>PASSWORD_PREFIX</code> · <code>SERVER_IP</code>. wrangler 에 계정이 여러 개면 <code>ACCOUNT_ID</code> 도</li>
+    <li>소스 폴더에서 실행</li>
+  </ol>
+  <div class="pre"><pre>node setup.mjs --dry-run      <span class="c"># 먼저 확인만 — 값 · 토큰 · 로그인 · 빌드 검사, 아무것도 만들지 않음</span>
+node setup.mjs                <span class="c"># 설치 (다시 실행하면 업데이트)</span></pre></div>
+  <div class="card">
+    <b>스크립트가 하는 일</b>
+    <ul>
+      <li>값 검사, 토큰 확인 (도메인이 몇 개 보이는지 · IP Rules 권한)</li>
+      <li>wrangler 로그인이 안 돼 있으면 브라우저를 열어 로그인</li>
+      <li>KV 만들기 → 배포 (시크릿 함께, <code>SESSION_SECRET</code> 은 자동) → 주소와 첫 로그인 안내</li>
+      <li>올린 시크릿은 <code>setup.env</code> 에서 지웁니다. 다시 실행할 때 비워 두면 이미 올린 값을 그대로 씁니다</li>
+      <li>값을 고친 뒤 다시 실행하면 새로 만들지 않고 업데이트합니다</li>
+    </ul>
+  </div>
+  <div class="warn"><b>안전장치</b> — 소스 폴더의 <code>wrangler.jsonc</code>(운영 중인 Worker)는 건드리지 않고 설치용 <code>wrangler.setup.jsonc</code> 를 따로 만듭니다.
+    <code>wrangler.jsonc</code> 의 Worker 이름이거나, 이 스크립트가 만들지 않은 기존 Worker 이름이면 덮어쓰지 않고 멈춥니다.</div>
+  <p>아래 1~11 은 같은 일을 손으로 하는 방법과 각 값의 뜻입니다.</p>
+
+  <ul class="toc">
+    <li><a href="#quick"><span class="no">⚡</span>빠른 설치 — 명령 하나</a></li>
+    <li><a href="#s1"><span class="no">1</span>API 토큰 만들기</a></li>
+    <li><a href="#s2"><span class="no">2</span>준비 · wrangler 로그인</a></li>
+    <li><a href="#s3"><span class="no">3</span>KV 만들기</a></li>
+    <li><a href="#s4"><span class="no">4</span>wrangler.jsonc — 변수</a></li>
+    <li><a href="#s5"><span class="no">5</span>배포</a></li>
+    <li><a href="#s6"><span class="no">6</span>시크릿 넣기</a></li>
+    <li><a href="#s7"><span class="no">7</span>첫 로그인 · 2단계 인증</a></li>
+    <li><a href="#s8"><span class="no">8</span>도메인 붙이기 (선택)</a></li>
+    <li><a href="#s9"><span class="no">9</span>코드 업데이트</a></li>
+    <li><a href="#s10"><span class="no">10</span>로컬 실행 (선택)</a></li>
+    <li><a href="#s11"><span class="no">11</span>자주 나는 문제</a></li>
+  </ul>
+
+  <!-- 1 -->
+  <h2 id="s1"><span class="no">1</span>API 토큰 만들기 (대시보드)</h2>
+  <p>관리할 도메인이 있는 계정으로 로그인 → 오른쪽 위 프로필 → <b>My Profile → API Tokens → Create Token → Custom token</b>.
+    토큰 값은 만들 때 한 번만 보이니 바로 복사해 둡니다.</p>
+
+  <h3>도메인 토큰 → 시크릿 <code>CF_API_TOKEN</code></h3>
+  <div class="tscroll"><table class="tbl">
+    <tr><th>항목</th><th>값</th><th>쓰는 곳</th></tr>
+    <tr><td>Permissions</td><td><code>Zone · Zone · Read</code></td><td>도메인 목록</td></tr>
+    <tr><td></td><td><code>Zone · DNS · Edit</code></td><td>프록시 (Proxied ↔ DNS only)</td></tr>
+    <tr><td></td><td><code>Zone · Zone Settings · Edit</code></td><td>SSL 모드 · Tiered Cache · Smart Tiered Cache</td></tr>
+    <tr><td></td><td><code>Zone · Cache Rules · Edit</code></td><td>정적파일 캐시 규칙</td></tr>
+    <tr><td>Zone Resources</td><td><code>Include · All zones from an account · (그 계정)</code></td><td>새로 추가한 도메인도 자동으로 포함</td></tr>
+    <tr><td>Client IP Filtering</td><td><b>비워 둠</b></td><td>Workers 는 나가는 IP 가 바뀌어서 걸면 안 됨</td></tr>
+  </table></div>
+
+  <h3>IP Rules 토큰 → 시크릿 <code>CF_IP_TOKEN</code> <span class="opt">선택</span></h3>
+  <div class="tscroll"><table class="tbl">
+    <tr><th>항목</th><th>값</th><th>쓰는 곳</th></tr>
+    <tr><td>Permissions</td><td><code>Account · Account Firewall Access Rules · Edit</code></td><td>계정 IP 룰 보기 · 삭제 · Action 변경</td></tr>
+    <tr><td></td><td><code>Zone · Firewall Services · Edit</code></td><td>자산존의 Allow 예외 룰</td></tr>
+    <tr><td></td><td><code>Zone · Zone · Read</code></td><td>계정 ID · 자산존 ID 자동으로 찾기</td></tr>
+  </table></div>
+  <p>따로 만들지 않고 도메인 토큰에 위 권한을 추가해도 됩니다. <code>CF_IP_TOKEN</code> 이 없으면 IP Rules 도 <code>CF_API_TOKEN</code> 을 씁니다.
+    이미 쓰던 토큰에 권한을 더할 땐 토큰 <b>Edit → Add more</b> — 토큰 값은 그대로라 다시 넣을 필요가 없습니다.</p>
+
+  <!-- 2 -->
+  <h2 id="s2"><span class="no">2</span>준비 · wrangler 로그인</h2>
+  <ul>
+    <li><b>Node.js</b> (LTS) 설치. <code>wrangler</code> 는 <code>npx</code> 로 바로 실행되므로 따로 설치하지 않아도 됩니다</li>
+    <li>이 도구의 소스 폴더를 받아서 그 폴더에서 아래 명령을 실행합니다</li>
+  </ul>
+  <div class="pre"><pre>npx wrangler login      <span class="c"># 브라우저가 열리면 Worker 를 둘 계정으로 허용</span>
+npx wrangler whoami     <span class="c"># 로그인한 계정과 계정 ID 확인 (계정이 여러 개면 여기서 고른다)</span></pre></div>
+  <p>Worker 를 둘 계정과 도메인이 있는 계정은 <b>달라도 됩니다</b>. 토큰만 도메인 계정에서 만들면 됩니다.</p>
+
+  <!-- 3 -->
+  <h2 id="s3"><span class="no">3</span>KV 만들기</h2>
+  <div class="pre"><pre>npx wrangler kv namespace create BDM_KV</pre></div>
+  <p>출력에 나오는 <code>id</code> 를 다음 단계의 <code>kv_namespaces</code> 에 넣습니다.</p>
+  <div class="warn"><code>wrangler.jsonc</code> 의 KV id 자리에 <code>&lt;...&gt;</code> 같은 자리표시가 남아 있으면 이 명령이 <code>Authentication error 10000</code> 으로 실패합니다.
+    그럴 땐 <code>kv_namespaces</code> 블록을 잠시 지우고 만든 뒤 다시 넣습니다.</div>
+
+  <!-- 4 -->
+  <h2 id="s4"><span class="no">4</span>wrangler.jsonc — 변수</h2>
+  <p>소스 폴더의 <code>wrangler.jsonc</code> 에서 <b>이름 · 계정 ID · KV id · 변수</b>를 바꿉니다. 나머지는 그대로 둡니다.</p>
+  <div class="pre"><pre>{
+  "name": "my-cf-admin",                 <span class="c">// Worker 이름 → 주소 my-cf-admin.&lt;서브도메인&gt;.workers.dev</span>
+  "account_id": "&lt;Worker 를 둘 계정 ID&gt;",  <span class="c">// 2단계 whoami 에서 본 값. 적어 두면 다른 계정에 잘못 배포되지 않음</span>
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  "kv_namespaces": [
+    { "binding": "BDM_KV", "id": "&lt;3단계에서 나온 id&gt;" }    <span class="c">// binding 이름은 BDM_KV 그대로</span>
+  ],
+  "vars": {
+    "SERVER_IP": "203.0.113.10",
+    "DEFAULT_GROUP": "",
+    "CONCURRENCY": "6",
+    "CACHE_TTL_MINUTES": "10",
+    "MAX_ZONES_PER_CALL": "5",
+    "OTP_ISSUER": "CF Admin",
+    "IP_PAIR_ZONE_NAME": "",
+    "IP_RATE_BUDGET": "900"
+  }
+}</pre></div>
+  <p>값은 모두 <b>따옴표 안의 문자열</b>로 적습니다. <b>설정 메뉴</b> 칸이 <span class="yes">가능</span> 인 것은 배포한 뒤 <a class="link" href="/settings.html">설정</a> 화면에서도 바꿀 수 있고, 여기 적은 값은 그때 <b>기본값</b>이 됩니다.</p>
+  <div class="tscroll"><table class="tbl">
+    <tr><th>이름</th><th>예</th><th>뜻</th><th>설정 메뉴</th></tr>
+    <tr><td><code>SERVER_IP</code></td><td><code>203.0.113.10</code></td><td>DNS · SSL/TLS 일괄 변경 대상 서버 IP. 이 IP 를 가리키는 A/AAAA 레코드만 바뀌고 나머지는 보호</td><td class="yes">가능</td></tr>
+    <tr><td><code>DEFAULT_GROUP</code></td><td><code>중요고객</code></td><td>처음 열 때 보이는 그룹 탭. 그룹이 없으면 비워 둠</td><td class="yes">가능</td></tr>
+    <tr><td><code>CACHE_TTL_MINUTES</code></td><td><code>10</code></td><td>도메인 SSL · 프록시 상태를 다시 읽기 전까지 기억하는 시간(분)</td><td class="yes">가능</td></tr>
+    <tr><td><code>CONCURRENCY</code></td><td><code>6</code></td><td>Cloudflare API 를 동시에 부르는 수</td><td>—</td></tr>
+    <tr><td><code>MAX_ZONES_PER_CALL</code></td><td><code>5</code></td><td>변경 요청 한 번에 넣는 도메인 수. 무료 요금제는 요청 1건당 외부 호출 50회 제한이라 5 권장</td><td>—</td></tr>
+    <tr><td><code>OTP_ISSUER</code></td><td><code>CF Admin</code></td><td>구글 OTP 앱에 보이는 이름. 콜론(:) 금지</td><td class="yes">가능</td></tr>
+    <tr><td><code>IP_PAIR_ZONE_NAME</code></td><td><code>example.com</code></td><td>404 가드가 IP 마다 Allow 예외 룰을 만드는 자산존. 쓰지 않으면 비워 둠 → 계정 IP 룰만 관리</td><td class="yes">가능</td></tr>
+    <tr><td><code>IP_RATE_BUDGET</code></td><td><code>900</code></td><td>IP Rules 화면이 5분 동안 쓰는 API 호출 상한. Cloudflare 한도 1,200회를 대시보드 등과 나눠 씀</td><td class="yes">가능</td></tr>
+    <tr><td><code>IP_ACCOUNT_ID</code><br><code>IP_PAIR_ZONE_ID</code></td><td>(비움)</td><td>보통 적지 않음 — 토큰으로 자동으로 찾음. IP Rules 토큰이 여러 계정에 걸쳐 있을 때만 계정 ID 를 적음</td><td>—</td></tr>
+  </table></div>
+  <div class="warn">관리 대상 도메인에 <b>route</b> 를 걸지 마세요. 그 도메인을 DNS only 로 바꾸는 순간 이 도구도 끊깁니다. 주소는 <code>workers.dev</code> 나 Custom Domain(8단계)을 씁니다.</div>
+
+  <!-- 5 -->
+  <h2 id="s5"><span class="no">5</span>배포</h2>
+  <div class="pre"><pre>npx wrangler deploy</pre></div>
+  <p>Worker 가 없으면 새로 만들어지고, <code>wrangler.jsonc</code> 의 변수 · KV 연결이 함께 들어갑니다.
+    끝나면 주소 <code>https://&lt;이름&gt;.&lt;서브도메인&gt;.workers.dev</code> 가 나옵니다. 시크릿을 넣기 전에는 열어도 "시크릿이 설정되지 않았습니다" 가 보입니다.</p>
+
+  <!-- 6 -->
+  <h2 id="s6"><span class="no">6</span>시크릿 넣기</h2>
+  <div class="tscroll"><table class="tbl">
+    <tr><th>이름</th><th></th><th>값</th></tr>
+    <tr><td><code>CF_API_TOKEN</code></td><td><span class="need">필수</span></td><td>1단계에서 만든 도메인 토큰</td></tr>
+    <tr><td><code>PASSWORD_PREFIX</code></td><td><span class="need">필수</span></td><td>로그인 비밀번호 앞부분. 실제 비밀번호 = <b>접두어 + <code>!</code> + 오늘 날짜 두 자리</b>(한국 시간). 예) 접두어 <code>abc</code>, 5일이면 <code>abc!05</code>. 대소문자 구분</td></tr>
+    <tr><td><code>SESSION_SECRET</code></td><td><span class="need">필수</span></td><td>로그인 쿠키 서명용 긴 임의 문자열. 외울 필요 없음. 바꾸면 모두 로그아웃됨</td></tr>
+    <tr><td><code>CF_IP_TOKEN</code></td><td><span class="opt">선택</span></td><td>IP Rules 토큰. 없으면 <code>CF_API_TOKEN</code> 을 씀</td></tr>
+  </table></div>
+  <p>하나씩 넣기 — 명령을 실행하면 값을 물어봅니다 (화면·기록에 남지 않음):</p>
+  <div class="pre"><pre>npx wrangler secret put CF_API_TOKEN
+npx wrangler secret put PASSWORD_PREFIX
+npx wrangler secret put SESSION_SECRET
+npx wrangler secret put CF_IP_TOKEN        <span class="c"># 선택</span></pre></div>
+  <p><code>SESSION_SECRET</code> 에 넣을 임의 문자열 만들기:</p>
+  <div class="pre"><pre>node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"</pre></div>
+  <p>한 번에 넣기 — JSON 파일에 적어서 올리고, <b>파일은 바로 지웁니다</b>:</p>
+  <div class="pre"><pre><span class="c"># secrets.json  {"CF_API_TOKEN": "...", "PASSWORD_PREFIX": "...", "SESSION_SECRET": "..."}</span>
+npx wrangler secret bulk secrets.json</pre></div>
+  <div class="warn">대시보드에서 넣을 땐 Worker → <b>Settings → Variables and Secrets → Add</b> 에서 <b>Type 을 <code>Secret</code></b> 으로 고릅니다.
+    <code>Text</code> 로 넣은 값은 다음 <code>wrangler deploy</code> 때 <code>wrangler.jsonc</code> 의 변수로 덮여 사라집니다.</div>
+
+  <!-- 7 -->
+  <h2 id="s7"><span class="no">7</span>첫 로그인 · 2단계 인증</h2>
+  <ol>
+    <li>배포 주소를 열고 비밀번호(<code>접두어!오늘날짜</code>)로 로그인</li>
+    <li>위쪽 <b>2단계 인증</b> → 이름 입력 → 구글 OTP 앱으로 QR 스캔 → 앱의 6자리 입력</li>
+    <li><b>처음 등록한 사람이 관리자</b>가 됩니다. 관리자만 다른 사람 OTP 추가 · 사용중지 · 삭제와 설정 변경을 할 수 있습니다</li>
+  </ol>
+  <div class="warn">OTP 를 등록하기 전에는 비밀번호를 아는 누구나 로그인해서 설정을 바꿀 수 있습니다. 배포 직후 바로 등록하세요.</div>
+
+  <!-- 8 -->
+  <h2 id="s8"><span class="no">8</span>도메인 붙이기 (선택)</h2>
+  <p><b>Worker 와 같은 계정의 도메인</b>이면: Worker → <b>Settings → Domains &amp; Routes → Add → Custom domain</b> 에서 <code>admin.example.com</code> 같은 이름을 넣습니다. DNS 레코드와 인증서는 자동으로 만들어집니다.</p>
+  <p><b>다른 계정의 도메인</b>이면 Custom domain 을 바로 붙일 수 없습니다 (도메인과 Worker 가 같은 계정이어야 함). 도메인 계정에 아래 몇 줄짜리 전달용 Worker 를 만들고, 그 Worker 에 Custom domain 을 붙입니다.</p>
+  <div class="pre"><pre>export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    url.hostname = "&lt;이름&gt;.&lt;서브도메인&gt;.workers.dev";   <span class="c">// 이 도구의 workers.dev 주소</span>
+    return fetch(new Request(url, request));
+  },
+};</pre></div>
+  <p>이 경우 요청 수는 두 계정 모두에서 1건씩 셉니다. 도구의 Worker 이름을 바꾸면 위 주소도 같이 바꿔야 합니다.</p>
+
+  <!-- 9 -->
+  <h2 id="s9"><span class="no">9</span>코드 업데이트</h2>
+  <div class="pre"><pre>npx wrangler deploy</pre></div>
+  <ul>
+    <li>시크릿 · KV 데이터(그룹 · 이력 · OTP · 설정 메뉴에서 바꾼 값)는 그대로 남습니다</li>
+    <li><code>wrangler.jsonc</code> 의 변수는 파일 값으로 다시 들어갑니다. 설정 메뉴에서 바꾼 값은 그 위에 덮이므로 계속 유지됩니다</li>
+    <li><b>Worker 이름은 대시보드에서 바꾸고</b> <code>wrangler.jsonc</code> 의 <code>name</code> 을 맞춥니다. 파일만 바꾸면 시크릿 없는 새 Worker 가 따로 생깁니다</li>
+  </ul>
+
+  <!-- 10 -->
+  <h2 id="s10"><span class="no">10</span>로컬 실행 (선택)</h2>
+  <p>Cloudflare Workers 가 안 될 때를 대비해 PC 에서 같은 화면을 띄울 수 있습니다. 로그인 없이 <code>127.0.0.1</code> 에서만 열립니다.</p>
+  <div class="pre"><pre>cp config.example.json config.json     <span class="c"># token (필수), ipToken (선택) 등을 채운다</span>
+node server.mjs                         <span class="c"># → http://127.0.0.1:8790</span></pre></div>
+  <p>로컬은 데이터를 <code>data/</code> 폴더에 따로 저장하므로 Workers 쪽 그룹 · 이력과는 공유되지 않습니다.</p>
+
+  <!-- 11 -->
+  <h2 id="s11"><span class="no">11</span>자주 나는 문제</h2>
+  <div class="tscroll"><table class="tbl">
+    <tr><th>증상</th><th>해결</th></tr>
+    <tr><td>"PASSWORD_PREFIX / SESSION_SECRET 시크릿이 설정되지 않았습니다"</td><td>6단계 시크릿 넣기</td></tr>
+    <tr><td>도메인 목록이 안 나오거나 토큰 오류 안내</td><td><code>CF_API_TOKEN</code> 값 · 권한 · Zone Resources 확인 (1단계)</td></tr>
+    <tr><td>IP Rules "토큰에 IP 룰 권한이 없습니다" (10000)</td><td><code>CF_IP_TOKEN</code> 을 넣거나 도메인 토큰에 IP 권한 추가 (1단계)</td></tr>
+    <tr><td>IP Rules "자산존 ... 을(를) 찾을 수 없습니다"</td><td>자산존 이름 확인, 또는 쓰지 않으면 <code>IP_PAIR_ZONE_NAME</code> 을 비움</td></tr>
+    <tr><td>대시보드에서 넣은 값이 배포 후 사라짐</td><td>Type 을 <code>Secret</code> 으로 다시 넣기 (6단계)</td></tr>
+    <tr><td>엉뚱한 계정에 배포됨</td><td><code>wrangler.jsonc</code> 에 <code>account_id</code> 적기 (4단계)</td></tr>
+    <tr><td>Worker 이름을 바꿨더니 붙인 도메인이 404</td><td>전달용 Worker 의 주소를 새 workers.dev 주소로 바꾸기 (8단계)</td></tr>
+  </table></div>
+</div>
+</main>
+</div>
+
+<script type="module">
+import { el } from '/shell.js';
+
+// 코드 칸마다 복사 버튼
+for (const box of document.querySelectorAll('.pre')) {
+  const pre = box.querySelector('pre');
+  const b = el('button', 'tiny', '복사');
+  b.onclick = async () => {
+    // 회색 주석(# ..., // ...)은 빼고 복사
+    const clone = pre.cloneNode(true);
+    clone.querySelectorAll('.c').forEach((c) => c.remove());
+    const text = clone.textContent.split('\n').map((l) => l.replace(/\s+$/, '')).join('\n').trim();
+    try { await navigator.clipboard.writeText(text); b.textContent = '복사됨'; }
+    catch { b.textContent = '복사 실패'; }
+    setTimeout(() => { b.textContent = '복사'; }, 1500);
+  };
+  box.append(b);
+}
+</script>
+</body>
+</html>

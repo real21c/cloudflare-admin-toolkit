@@ -1,0 +1,55 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // 설치는 node setup.mjs 로 한 번에 할 수 있다 (이 파일은 건드리지 않음 — 화면의 '도움말' 메뉴 참고).
+  // 이 파일로 직접 배포할 때만 아래 값을 채운다.
+
+  // Worker 이름 → 주소 <이름>.<서브도메인>.workers.dev
+  // 이름을 바꿀 땐 대시보드에서 바꾸고 여기를 맞춘다. 여기만 바꾸면 시크릿 없는 새 Worker 가 따로 생긴다.
+  "name": "cloudflare-admin-toolkit",
+
+  // Worker 를 둘 계정 ID. wrangler 에 계정이 여러 개면 적어 두어야 다른 계정에 잘못 배포되지 않는다
+  // "account_id": "",
+
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+
+  // 관리 대상 도메인에 route 를 걸면, 그 도메인을 DNS only 로 바꾸는 순간
+  // 이 도구 자신이 죽는다. workers.dev 서브도메인이나 Custom Domain 을 쓴다.
+  "workers_dev": true,
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // 인증을 먼저 태워야 하므로 정적 파일보다 Worker 가 먼저 실행되어야 한다
+    "run_worker_first": true
+  },
+
+  // KV — npx wrangler kv namespace create BDM_KV 로 만든 id 를 넣고 주석을 푼다
+  // "kv_namespaces": [
+  //   { "binding": "BDM_KV", "id": "" }
+  // ],
+
+  "vars": {
+    // DNS · SSL/TLS 일괄 변경 대상 서버 IP (필수)
+    "SERVER_IP": "",
+    // 처음 보이는 그룹 탭
+    "DEFAULT_GROUP": "",
+    "CONCURRENCY": "6",
+    "CACHE_TTL_MINUTES": "10",
+    // Workers 무료 플랜은 요청당 외부 subrequest 50개 제한.
+    // zone 하나당 조회 2회 + 변경 수 건이라 5개씩 끊는다.
+    "MAX_ZONES_PER_CALL": "5",
+    // 구글 OTP 앱에 표시되는 이름. 바꾸면 새로 등록하는 OTP 부터 반영된다.
+    "OTP_ISSUER": "CF Admin",
+    // IP Rules — 404 가드가 계정 챌린지와 쌍으로 Allow 룰을 만드는 자산존. 쓰지 않으면 비워 둔다
+    "IP_PAIR_ZONE_NAME": "",
+    // IP Rules 화면이 5분 동안 쓸 Cloudflare API 호출 상한 (한도 1,200회를 대시보드 등과 나눠 씀)
+    "IP_RATE_BUDGET": "900"
+  }
+
+  // 시크릿은 파일에 두지 않는다. npx wrangler secret put <이름> 으로 등록한다.
+  //   CF_API_TOKEN     Cloudflare API 토큰 (도메인)
+  //   CF_IP_TOKEN      IP Rules 토큰 (선택 — 없으면 CF_API_TOKEN 을 씀)
+  //   PASSWORD_PREFIX  비밀번호 접두어 (실제 비밀번호 = 접두어 + '!' + 오늘 날짜 2자리)
+  //   SESSION_SECRET   세션 쿠키 서명용 임의 문자열
+}

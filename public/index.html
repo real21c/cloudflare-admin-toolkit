@@ -1,0 +1,1334 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudflare Admin Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shell.css">
+<style>
+
+  /* 그룹 탭 — CF 서브내비 스타일. 편집 버튼은 탭 줄 오른쪽 끝에 붙인다 */
+  .tabsrow {
+    display: flex; align-items: flex-end; gap: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .tabactions { display: flex; gap: 2px; padding-bottom: 5px; }
+  .tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+  .tab {
+    padding: 9px 14px; font-size: 13.5px; cursor: pointer; color: var(--dim);
+    border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.on { color: var(--text); font-weight: 600; border-bottom-color: var(--cf-orange); }
+  .tab .n {
+    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 0;
+    background: var(--line-soft); font-size: 11.5px; font-weight: 500; color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .tab.on .n { background: var(--cf-orange-bg); color: var(--cf-orange-dk); }
+  .tab.warnTab { color: var(--red); }
+
+  /* 툴바 — 모든 선택지를 펼쳐서 보여준다 (select 로 감추지 않는다) */
+  .bar {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 0;
+    padding: 10px 14px; margin-bottom: 12px; box-shadow: var(--shadow);
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 5px 0; }
+  .rowsep { height: 1px; background: var(--line-soft); margin: 6px 0; }
+  .rlabel {
+    font-size: 11.5px; font-weight: 600; color: var(--dim);
+    letter-spacing: .03em; min-width: 46px; white-space: nowrap;
+  }
+  .bar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 6px; }
+  #q { min-width: 220px; }
+  .selinfo { font-size: 13px; color: var(--dim); white-space: nowrap; }
+  .selinfo b { color: var(--text); font-weight: 600; }
+
+  /* 버튼 그룹 */
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 0; overflow: hidden; }
+  .seg.wrapseg { flex-wrap: wrap; }
+  .seg button {
+    border: none; border-right: 1px solid var(--line); border-radius: 0;
+    height: 30px; padding: 0 12px; font-size: 13px; background: var(--panel); white-space: nowrap;
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button:hover:not(:disabled):not(.on) { background: var(--bg); }
+  .seg button.on { background: var(--cf-orange); border-color: var(--cf-orange); color: #fff; font-weight: 600; }
+  .seg button .cnt2 {
+    margin-left: 7px; font-size: 11.5px; opacity: .65; font-variant-numeric: tabular-nums;
+  }
+  .seg button.on .cnt2 { opacity: .9; }
+  .seg button .ip { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+
+  /* 카드 + 테이블 */
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 0;
+    box-shadow: var(--shadow); overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 9px 12px; text-align: left; }
+  th {
+    font-size: 11.5px; font-weight: 600; color: var(--dim); letter-spacing: .03em;
+    text-transform: uppercase; background: var(--panel);
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2;
+  }
+  td { border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--bg); }
+  td.c, th.c { text-align: center; }
+  input[type=checkbox] { accent-color: var(--cf-blue); width: 15px; height: 15px; cursor: pointer; }
+
+  .dom { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500; }
+  .dom:hover .dname { color: var(--cf-blue); text-decoration: underline; }
+  .caret { color: var(--dimmer); font-size: 10px; width: 9px; }
+
+  /* 프록시 구름 버튼 — CF DNS 화면과 동일한 개념 */
+  .cloud {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    padding: 3px 9px 3px 6px; border-radius: 0; border: 1px solid transparent;
+    font-size: 12.5px; font-weight: 500; white-space: nowrap;
+  }
+  .cloud:hover { border-color: var(--line); background: var(--bg); }
+  .cloud svg { display: block; }
+  .cloud.on   { color: var(--cf-orange-dk); }
+  .cloud.off  { color: var(--dim); }
+  .cloud.mix  { color: var(--amber); }
+  .cloud.na   { color: var(--dimmer); cursor: default; }
+  .cloud.na:hover { border-color: transparent; background: transparent; }
+  .cloud .cnt { font-variant-numeric: tabular-nums; }
+  .clouds { display: inline-flex; gap: 4px; }
+  .cloud.zero { opacity: .3; }
+
+  /* SSL 뱃지 */
+  .ssl {
+    display: inline-block; padding: 2.5px 10px; border-radius: 0;
+    font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .ssl:hover { filter: brightness(.96); }
+  .ssl.full, .ssl.strict { background: var(--green-bg); color: var(--green); }
+  .ssl.flexible { background: var(--amber-bg); color: var(--amber); }
+  .ssl.off { background: var(--red-bg); color: var(--red); }
+  .ssl.load { background: transparent; color: var(--dimmer); cursor: default; }
+
+
+  /* 레코드 펼침 */
+  .recs { background: var(--bg); padding: 0 0 0 34px; }
+  .recs table { background: transparent; }
+  .recs th { background: transparent; position: static; border-bottom: 1px solid var(--line-soft); }
+  .recs td, .recs th { padding: 6px 12px; font-size: 12.5px; }
+  .recs td { border-bottom: 1px solid var(--line-soft); }
+  .recs tr.protrow td { background: var(--protrow); }
+  .recs tr.protrow:hover td { background: var(--protrow-hi); }
+  .mono { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 12px; color: var(--dim); }
+
+  /* 작업 패널 — 라벨 열을 맞추고 줄마다 구분선 */
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    margin-bottom: 16px; box-shadow: var(--shadow);
+  }
+  .prow { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
+  .prow + .prow { border-top: 1px solid var(--line-soft); }
+  .prow.off { visibility: hidden; }
+  .plabel {
+    flex: 0 0 132px; font-size: 11.5px; font-weight: 700; color: var(--dim);
+    letter-spacing: .03em; text-align: right;
+  }
+  .pbody { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .phint { font-size: 12px; color: var(--dim); }
+  .expr {
+    font-family: ui-monospace, Consolas, monospace; font-size: 11.5px;
+    color: var(--dim); line-height: 1.4; word-break: break-all;
+  }
+
+  /* 실행 영역 — 고르는 버튼(위)과 확실히 구분한다 */
+  .actbar { margin-bottom: 16px; }
+  .acttitle { font-size: 13px; color: var(--dim); margin-bottom: 10px; }
+  .acttitle b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .acttitle .ipv { font-family: ui-monospace, Consolas, monospace; color: var(--cf-orange-dk); font-weight: 600; }
+  .actrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; row-gap: 14px; }
+  .actdiv { width: 1px; height: 26px; background: var(--line); margin: 0 4px; }
+
+  button.act {
+    display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center;
+    height: 68px; padding: 0 24px; border-radius: 0; border: none; color: #fff; gap: 0;
+  }
+  button.act .actmain { font-size: 18px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
+  button.act .actsub { font-size: 13px; opacity: .9; line-height: 1.3; margin-top: 6px; }
+  button.act .actsub b { font-size: 15px; font-weight: 750; opacity: 1; font-variant-numeric: tabular-nums; }
+  button.act.on  { background: var(--cf-orange); }
+  button.act.on:hover:not(:disabled)  { background: var(--cf-orange-dk); border-color: transparent; }
+  button.act.off { background: #6b6b6b; }
+  button.act.off:hover:not(:disabled) { background: #575757; border-color: transparent; }
+  button.act:disabled { opacity: .35; }
+
+  /* 미리보기 경고 줄 */
+  .wline {
+    display: block; margin: 3px 0 0 14px; padding: 5px 9px; border-radius: 0;
+    background: var(--amber-bg); color: var(--amber); font-size: 12px;
+  }
+
+  /* 진행률 */
+  .progress { height: 2px; background: var(--line-soft); overflow: hidden; margin-bottom: 14px; border-radius: 0; }
+  .progress > i { display: block; height: 100%; background: var(--cf-orange); width: 0; transition: width .18s; }
+
+  .seclabel {
+    font-size: 12px; font-weight: 700; color: var(--cf-orange-dk);
+    letter-spacing: .03em; margin: 14px 0 8px; padding-bottom: 5px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .dlg-b > .seclabel:first-child { margin-top: 0; }
+  .zblock { margin-bottom: 14px; }
+  .dlg-b > .zblock:last-child { margin-bottom: 0; }
+  .zblock h4 { margin: 0 0 6px; font-size: 13.5px; font-weight: 650; }
+
+  /* 미리보기 before / after */
+  .difftbl { width: auto; border-collapse: collapse; margin-left: 2px; }
+  .difftbl th {
+    position: static; background: transparent; border-bottom: 1px solid var(--line-soft);
+    padding: 3px 14px 5px 0; font-size: 10.5px; color: var(--dimmer);
+  }
+  .difftbl td { border: none; padding: 4px 14px 4px 0; font-size: 13px; }
+  .difftbl tbody tr:last-child td { padding-bottom: 0; }
+  .difftbl .nm { font-weight: 600; min-width: 90px; }
+  .difftbl .v { min-width: 104px; }
+  .difftbl .strong { font-weight: 650; }
+  .difftbl .ar { color: var(--dimmer); padding-right: 12px; width: 18px; }
+  .difftbl .why { color: var(--dimmer); font-size: 12px; padding-left: 4px; }
+  .difftbl tr.same td { opacity: .5; }
+  .difftbl tr.sep td { padding: 12px 0 5px; }
+  .difftbl .septxt {
+    display: block; font-size: 10.5px; color: var(--dimmer);
+    letter-spacing: .04em; border-top: 1px solid var(--line); padding-top: 7px;
+  }
+  .sProxied  { color: var(--cf-orange-dk); }
+  .sDnsonly  { color: var(--dim); }
+  .sFull     { color: var(--green); }
+  .sFlexible { color: var(--amber); }
+  .sOff      { color: var(--red); }
+  .chg { font-size: 12.5px; padding: 2px 0 2px 14px; color: var(--text); }
+  .chg .arrow { color: var(--dim); }
+  .chg .to { color: var(--cf-orange-dk); font-weight: 500; }
+  .chg.skip { color: var(--dimmer); }
+
+  /* 로그 */
+  .logrow {
+    display: flex; gap: 14px; align-items: baseline; padding: 7px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+  }
+  .logrow:last-child { border-bottom: none; }
+  .logrow .t { color: var(--dimmer); white-space: nowrap; }
+  .logrow .z { font-weight: 600; min-width: 180px; }
+  .logrow .l { flex: 1; }
+  .logrow .by { color: var(--dim); white-space: nowrap; }
+  .logrow.fail .l { color: var(--red); }
+  .logrow.rev { opacity: .45; }
+  .logrow.rev .l { text-decoration: line-through; }
+
+
+  /* 전체 화면 진행 오버레이 */
+  .overlay {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ovl-box {
+    background: var(--panel); border: 1px solid var(--line);
+    padding: 26px 30px; min-width: 420px; max-width: 92vw; box-shadow: 0 12px 48px rgba(0,0,0,.4);
+  }
+  .ovl-title { font-size: 15px; font-weight: 650; margin-bottom: 16px; }
+  .ovl-bar { height: 6px; background: var(--line-soft); overflow: hidden; }
+  .ovl-bar > i { display: block; height: 100%; width: 0; background: var(--cf-orange); transition: width .2s; }
+  .ovl-sub {
+    margin-top: 10px; font-size: 12.5px; color: var(--dim);
+    font-variant-numeric: tabular-nums; display: flex; justify-content: space-between;
+  }
+
+
+  /* 변경 이력 화면 — 도메인 작업용 탭·버튼 숨김 */
+  .logmode .tabsrow, .logmode .panel, .logmode #btnRefresh, .logmode #btnConfig { display: none; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#f6821f" d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+    </svg>
+    Cloudflare Admin Toolkit
+  </span>
+  <span class="grow"></span>
+  <button class="tiny" id="btnRefresh" title="SSL·프록시 상태를 다시 읽습니다">↻ 새로고침</button>
+  <button class="tiny" id="btnConfig" title="캐시규칙·Tiered·Smart 설정을 전부 다시 읽습니다 (하루 한 번은 자동)">설정 다시 읽기</button>
+  <button class="tiny hide" id="btnOtp" title="로그인할 때 구글 OTP 6자리를 함께 받습니다">2단계 인증</button>
+  <button class="tiny hide" id="btnLogout">로그아웃</button>
+</div>
+
+<div class="app">
+<nav id="side" class="side"></nav>
+<main class="main">
+<div class="wrap">
+  <h1 id="pageTitle">DNS · SSL/TLS</h1>
+  <div class="sub" id="freshness">불러오는 중…</div>
+
+  <div id="fatal" class="notice hide"></div>
+
+  <div class="tabsrow">
+    <div class="tabs" id="tabs"></div>
+    <span class="grow"></span>
+    <span class="tabactions">
+      <button class="ghost tiny" id="btnNewGroup">+ 그룹 만들기</button>
+      <button class="ghost tiny hide" id="btnRenameGroup">이름 변경</button>
+      <button class="ghost tiny hide" id="btnDelGroup">삭제</button>
+    </span>
+  </div>
+
+  <div class="panel">
+    <div class="prow">
+      <span class="plabel">프록시 · SSL</span>
+      <div class="pbody">
+        <button class="act on" id="btnProxyOn">
+          <span class="actmain">Proxied + Flexible</span><span class="actsub" id="cntOn"></span>
+        </button>
+        <button class="act off" id="btnProxyOff">
+          <span class="actmain">DNS only + Full</span><span class="actsub" id="cntOff"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="prow">
+      <span class="plabel">캐시규칙</span>
+      <div class="pbody">
+        <button id="btnCacheOn">정적파일 캐시 규칙 적용</button>
+        <button id="btnCacheOff">규칙 제거</button>
+        <code class="expr" id="cacheExpr"></code>
+      </div>
+    </div>
+
+    <div class="prow">
+      <span class="plabel">Tiered Cache</span>
+      <div class="pbody">
+        <button id="btnTierOn">켜기</button>
+        <button id="btnTierOff">끄기</button>
+        <code class="expr">argo/tiered_caching</code>
+        <span class="phint">하위 엣지(홍콩·도쿄 등)가 원서버로 바로 가지 않고 상위 엣지를 거침</span>
+      </div>
+    </div>
+
+    <div class="prow">
+      <span class="plabel">Smart Tiered Cache</span>
+      <div class="pbody">
+        <button id="btnSmartOn">켜기</button>
+        <button id="btnSmartOff">끄기</button>
+        <code class="expr">tiered_cache_smart_topology</code>
+        <span class="phint">상위 엣지를 원서버와 가까운 곳으로 자동 선택 (현재 ICN 서울) · 무료</span>
+      </div>
+    </div>
+
+    <div class="prow" id="moveBar">
+      <span class="plabel">그룹 이동</span>
+      <div class="pbody">
+        <span class="seg wrapseg" id="segGroupMove"></span>
+        <span class="phint" id="selInfo"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="progress hide" id="prog"><i></i></div>
+
+  <div id="view"></div>
+  <div id="logView" class="hide"></div>
+</div>
+</main>
+</div>
+
+<div class="overlay hide" id="ovl">
+  <div class="ovl-box">
+    <div class="ovl-title" id="ovlTitle"></div>
+    <div class="ovl-bar"><i id="ovlFill"></i></div>
+    <div class="ovl-sub" id="ovlSub"></div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-h" id="dlgH"></div>
+  <div class="dlg-b" id="dlgB"></div>
+  <div class="progress hide" id="dlgProg" style="margin:0"><i></i></div>
+  <div class="dlg-f">
+    <button class="ghost" id="dlgCancel">취소</button>
+    <button class="primary" id="dlgOk">적용</button>
+  </div>
+</dialog>
+
+<script type="module">
+// 공통 화면(왼쪽 메뉴 · OTP · 로그아웃 · 작은 입력 창)은 shell.js
+import { $, el, miniOpen, askText, askChoice, setBusyCheck } from '/shell.js';
+
+const SSL_LABEL = { off:'Off', flexible:'Flexible', full:'Full', strict:'Full (strict)', origin_pull:'Origin Pull' };
+
+
+// 보안이 강한 순서로 나열한다 (Cloudflare 대시보드와 동일한 순서)
+const SSL_CHOICES = [
+  { value: 'strict',   label: 'Full (strict)' },
+  { value: 'full',     label: 'Full' },
+  { value: 'flexible', label: 'Flexible' },
+  { value: 'off',      label: 'Off' },
+];
+
+// 값 자체로 색을 정한다 — Proxied 는 주황, DNS only 는 회색
+function z0ssl(r) {
+  const z = state.zones.find((x) => x.id === r.zoneId);
+  return z ? z.ssl : null;
+}
+
+function stateCls(v) {
+  if (v === 'Proxied') return 'sProxied';
+  if (v === 'DNS only') return 'sDnsonly';
+  if (v === 'Flexible') return 'sFlexible';
+  if (v === 'Off') return 'sOff';
+  if (v === 'Full' || v === 'Full (strict)') return 'sFull';
+  return '';
+}
+
+// CF 대시보드의 구름 아이콘
+const CLOUD_PATH = 'M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z';
+function cloudSvg(fill) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '19'); svg.setAttribute('height', '19');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(ns, 'path');
+  p.setAttribute('d', CLOUD_PATH);
+  p.setAttribute('fill', fill);
+  svg.append(p);
+  return svg;
+}
+
+const state = {
+  zones: [], groups: { order: [], map: {} }, orphans: [], ips: [],
+  tab: null,  // 첫 로드 때 첫 그룹으로 정해진다
+  selected: new Set(), expanded: new Set(), records: {},
+  serverIp: null,                  // 이 IP 가 일괄 변경 대상이다
+  maxZones: 999,                   // 한 요청에 보낼 zone 수 상한 (Workers 제한)
+  busy: false,                     // 적용 중이면 다이얼로그를 닫지 못하게 한다
+  scope: { mode: 'ip', ip: null },
+};
+
+// 그룹 목록 — 이름순
+function groupNames() {
+  return state.groups.order.slice().sort((a, b) => a.localeCompare(b, 'ko'));
+}
+
+// 버튼 그룹 렌더러. items = [{value, label, count, mono}]
+function renderSeg(hostId, items, current, onPick) {
+  const host = $(hostId);
+  host.innerHTML = '';
+  for (const it of items) {
+    const b = el('button', it.value === current ? 'on' : '');
+    const lab = el('span', it.mono ? 'ip' : null, it.label);
+    b.append(lab);
+    if (it.count != null) b.append(el('span', 'cnt2', String(it.count)));
+    if (it.title) b.title = it.title;
+    b.onclick = () => onPick(it.value);
+    host.append(b);
+  }
+}
+
+// 전체 화면을 덮는 진행 표시. 진행 중에는 아무것도 못 누르게 한다.
+function showOverlay(title, done, all) {
+  $('#ovlTitle').textContent = title;
+  const pct = all ? Math.round((done / all) * 100) : 0;
+  $('#ovlFill').style.width = pct + '%';
+  $('#ovlSub').innerHTML = '<span>' + done + ' / ' + all + ' 도메인</span><span>' + pct + '%</span>';
+  $('#ovl').classList.remove('hide');
+}
+
+function hideOverlay() {
+  $('#ovl').classList.add('hide');
+  $('#ovlFill').style.width = '0';
+}
+
+// 요청 하나가 멈추면 진행 전체가 멈추므로 60초가 넘으면 끊고 실패로 처리한다.
+async function api(path, opts) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60000);
+  let res;
+  try {
+    res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal }, opts));
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('응답 시간 초과 (60초)');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.status === 401) { location.href = '/login'; throw new Error('세션이 만료되었습니다.'); }
+  const json = await res.json().catch(() => ({ error: 'bad response' }));
+  if (!res.ok) throw new Error(json.message || json.error || ('HTTP ' + res.status));
+  return json;
+}
+
+// ── 초기 로드 ────────────────────────────────────────────────
+async function boot() {
+  try {
+    const v = await api('/api/verify');
+    // 정상일 때는 따로 표시하지 않는다. 만료·비활성 등 문제가 있을 때만 알린다
+    if (v.status !== 'active') { const f = $('#fatal'); f.classList.remove('hide'); f.textContent = 'Cloudflare API 토큰 상태: ' + v.status; }
+  } catch (e) {
+    const f = $('#fatal');
+    f.classList.remove('hide');
+    f.textContent = e.message;
+    $('#freshness').textContent = '';
+    return;
+  }
+  await loadZones();
+  // 상태(SSL·프록시)를 먼저 채우고, 하루 지난 설정(캐시규칙·Tiered·Smart)만 이어서 채운다.
+  // 변경 이력 화면으로 바로 들어왔으면 도메인 화면을 처음 열 때까지 미룬다 (Cloudflare 호출 수백 번)
+  if (location.hash === '#log') fillPending = true;
+  else fillStatus(false).then(() => fillConfig(false));
+}
+let fillPending = false;
+
+async function loadZones(keepSelection) {
+  const d = await api('/api/zones');
+  state.zones = d.zones;
+  state.groups = (d.groups && d.groups.order) ? d.groups : { order: [], map: {} };
+  state.orphans = d.orphans || [];
+  state.serverIp = d.serverIp;
+  state.maxZones = d.maxZonesPerCall || 999;
+  $('#cacheExpr').textContent = d.cacheRuleExpr || '';
+  state.scope = { mode: 'ip', ip: d.serverIp };
+  // 처음 열면 첫 그룹을 보여준다 (없으면 전체)
+  // 처음 열 때 보여줄 탭 — config.json 의 defaultGroup, 없으면 첫 그룹
+  if (state.tab === null) {
+    const want = d.defaultGroup;
+    state.tab = (want && state.groups.order.indexOf(want) !== -1) ? want
+              : (groupNames()[0] || '__all__');
+  }
+  if (!keepSelection) selectAllVisible();
+  renderTabs(); renderBar(); render(); updateFreshness();
+}
+
+// 툴바의 모든 버튼 그룹을 다시 그린다
+function renderBar() {
+  const gitems = groupNames().map((g) => ({ value: g, label: g }));
+  gitems.push({ value: '__none__', label: '미분류' });
+  renderSeg('#segGroupMove', gitems, null, (g) => moveSelectedToGroup(g));
+
+  syncSel();
+  updateScopeInfo();
+}
+
+// "선택한 N개 도메인 중 <IP> 를 가리키는 레코드 M건이 대상입니다"
+function updateScopeInfo() {
+  const zs = state.zones.filter((z) => state.selected.has(z.id));
+
+  let hit = 0, doms = 0;
+  for (const z of zs) {
+    const n = state.scope.mode === 'all'
+      ? (z.proxyable || 0)
+      : ((z.ipCounts || {})[state.scope.ip] || 0);
+    if (n) { hit += n; doms++; }
+  }
+
+  const nums = '<b>' + doms + '</b>개 도메인 <b>' + hit + '</b>건, ';
+  $('#cntOn').innerHTML  = nums + 'Cloudflare 경유 + SSL Flexible';
+  $('#cntOff').innerHTML = nums + '원서버 직결 + SSL Full';
+  $('#btnProxyOn').disabled = hit === 0;
+  $('#btnProxyOff').disabled = hit === 0;
+}
+
+async function moveSelectedToGroup(g) {
+  if (!state.selected.size) return;
+  for (const z of state.zones) {
+    if (!state.selected.has(z.id)) continue;
+    if (g === '__none__') { delete state.groups.map[z.name]; z.group = null; }
+    else { state.groups.map[z.name] = g; z.group = g; }
+  }
+  await saveGroups();
+  state.selected.clear();
+  renderTabs(); renderBar(); render();
+}
+
+// 청크로 나눠 조회하는 공통 루프.
+// 이미 돌고 있으면 새로 시작하지 않는다 — 두 개가 겹치면 진행률이 서로 덮어써져 멈춘 것처럼 보인다.
+let loadRunning = false;
+async function fillChunks(endpoint, ids, chunk, label, force, applyOne) {
+  if (loadRunning || !ids.length) { if (!loadRunning) updateFreshness(); return; }
+  loadRunning = true;
+  $('#btnRefresh').disabled = true;
+  $('#btnConfig').disabled = true;
+  const prog = $('#prog');
+  prog.classList.remove('hide');
+  let done = 0;
+  try {
+    for (let i = 0; i < ids.length; i += chunk) {
+      const slice = ids.slice(i, i + chunk);
+      try {
+        const d = await api(endpoint, { method: 'POST', body: JSON.stringify({ zoneIds: slice, force: !!force }) });
+        for (const [zid, v] of Object.entries(d.status || d.config || {})) {
+          const z = state.zones.find((x) => x.id === zid);
+          if (z) applyOne(z, v);
+        }
+        render();
+      } catch (e) { console.warn(label + ' 청크 실패', e); }
+      done += slice.length;
+      prog.firstElementChild.style.width = Math.round((done / ids.length) * 100) + '%';
+      updateFreshness(done, ids.length, label);
+    }
+  } finally {
+    loadRunning = false;
+    $('#btnRefresh').disabled = false;
+    $('#btnConfig').disabled = false;
+    prog.classList.add('hide');
+    prog.firstElementChild.style.width = '0';
+    updateFreshness();
+  }
+}
+
+// 상태 — SSL·프록시. zone 당 2회 호출이라 20개씩 (Workers 한도 50 안)
+function fillStatus(force) {
+  const ids = state.zones.filter((z) => force || z.stale || z.summary == null).map((z) => z.id);
+  return fillChunks('/api/status', ids, 20, '상태 조회 중…', force, (z, s) => {
+    z.ssl = s.ssl; z.autoMode = s.autoMode; z.summary = s.summary; z.cachedAt = s.at; z.stale = false;
+    if (s.cacheRule !== undefined) z.cacheRule = s.cacheRule;
+    if (s.tiered !== undefined) z.tiered = s.tiered;
+    if (s.smart !== undefined) z.smart = s.smart;
+  });
+}
+
+// 설정 — 캐시규칙·Tiered·Smart. zone 당 3회 호출이라 15개씩.
+// force 가 아니면 하루 지난 것만 읽는다.
+function fillConfig(force) {
+  const ids = state.zones.filter((z) => force || z.cfgStale).map((z) => z.id);
+  return fillChunks('/api/config', ids, 15, '설정 조회 중…', force, (z, c) => {
+    z.cacheRule = c.cacheRule; z.tiered = c.tiered; z.smart = c.smart; z.cfgStale = false;
+  });
+}
+
+function updateFreshness(done, total, label) {
+  if (logOpen) return; // 변경 이력을 보는 중엔 건수 표시를 덮어쓰지 않는다
+  if (done != null) { $('#freshness').textContent = (label || '상태 조회 중…') + ' ' + done + ' / ' + total; return; }
+  const times = state.zones.map((z) => z.cachedAt).filter(Boolean);
+  const filled = state.zones.filter((z) => z.summary).length;
+  let s = '도메인 ' + state.zones.length + '개';
+  if (filled) {
+    const mins = Math.round((Date.now() - Math.min.apply(null, times)) / 60000);
+    s += ' · 상태 ' + filled + '개 · 갱신 ' + (mins < 1 ? '방금' : mins + '분 전');
+  }
+  $('#freshness').textContent = s;
+}
+
+// ── 그룹 ────────────────────────────────────────────────────
+function groupCounts() {
+  const c = { __none__: 0 };
+  for (const g of groupNames()) c[g] = 0;
+  for (const z of state.zones) {
+    if (z.group && c[z.group] != null) c[z.group]++; else c.__none__++;
+  }
+  return c;
+}
+
+function renderTabs() {
+  const c = groupCounts();
+  const tabs = $('#tabs'); tabs.innerHTML = '';
+  const mk = (key, label, n, isGroup) => {
+    const t = el('div', 'tab' + (state.tab === key ? ' on' : ''));
+    t.append(label); t.append(el('span', 'n', String(n)));
+    t.onclick = () => { state.tab = key; selectAllVisible(); renderTabs(); renderBar(); render(); };
+    if (isGroup) {
+      t.title = '더블클릭하면 이름을 바꿉니다';
+      t.ondblclick = () => renameGroup(key);
+    }
+    tabs.append(t);
+  };
+  mk('__all__', '전체', state.zones.length);
+  for (const g of groupNames()) mk(g, g, c[g] || 0, true);
+  mk('__none__', '미분류', c.__none__ || 0);
+
+  if (state.orphans.length) {
+    const t = el('div', 'tab warnTab', '삭제된 도메인 ' + state.orphans.length);
+    t.onclick = cleanOrphans;
+    tabs.append(t);
+  }
+
+  // 사용자 그룹을 보고 있을 때만 이름 변경 / 삭제 버튼을 띄운다
+  const onGroup = state.groups.order.indexOf(state.tab) !== -1;
+  $('#btnRenameGroup').classList.toggle('hide', !onGroup);
+  $('#btnDelGroup').classList.toggle('hide', !onGroup);
+}
+
+async function renameGroup(oldName) {
+  const next = await askText('그룹 이름 변경', oldName);
+  if (!next || next === oldName) return;
+  if (state.groups.order.indexOf(next) !== -1) return alert('이미 있는 그룹입니다.');
+
+  state.groups.order = state.groups.order.map((g) => (g === oldName ? next : g));
+  for (const [domain, g] of Object.entries(state.groups.map)) {
+    if (g === oldName) state.groups.map[domain] = next;
+  }
+  for (const z of state.zones) if (z.group === oldName) z.group = next;
+  if (state.tab === oldName) state.tab = next;
+
+  await saveGroups();
+  renderTabs(); renderBar(); render();
+}
+
+async function deleteGroup(name) {
+  const n = state.zones.filter((z) => z.group === name).length;
+  const msg = n
+    ? '"' + name + '" 그룹을 삭제합니다.\n\n소속된 도메인 ' + n + '개는 미분류로 이동합니다.\n(Cloudflare 설정은 바뀌지 않습니다)'
+    : '"' + name + '" 그룹을 삭제합니다.';
+  if (!confirm(msg)) return;
+
+  state.groups.order = state.groups.order.filter((g) => g !== name);
+  for (const [domain, g] of Object.entries(state.groups.map)) {
+    if (g === name) delete state.groups.map[domain];
+  }
+  for (const z of state.zones) if (z.group === name) z.group = null;
+  if (state.tab === name) state.tab = '__all__';
+
+  await saveGroups();
+  state.selected.clear();
+  renderTabs(); renderBar(); render();
+}
+
+const saveGroups = () => api('/api/groups', { method: 'POST', body: JSON.stringify(state.groups) });
+
+async function cleanOrphans() {
+  if (!confirm('Cloudflare에서 삭제된 도메인 ' + state.orphans.length + '개를 그룹에서 정리할까요?\n\n' + state.orphans.join('\n'))) return;
+  for (const n of state.orphans) delete state.groups.map[n];
+  await saveGroups();
+  state.orphans = []; renderTabs();
+}
+
+// ── 목록 ────────────────────────────────────────────────────
+function visibleZones() {
+  return state.zones.filter((z) => {
+    if (state.tab === '__none__') return !z.group;
+    if (state.tab !== '__all__') return z.group === state.tab;
+    return true;
+  });
+}
+
+// 지금 탭에 보이는 도메인을 전부 체크한다 (기본 상태)
+function selectAllVisible() {
+  state.selected = new Set(visibleZones().map((z) => z.id));
+}
+
+// 일괄 변경의 대상 = 체크한 도메인
+function targetZones() {
+  return state.zones.filter((z) => state.selected.has(z.id)).map((z) => ({ id: z.id, name: z.name }));
+}
+
+function render() {
+  const rows = visibleZones();
+  const view = $('#view'); view.innerHTML = '';
+
+  if (!rows.length) {
+    const card = el('div', 'card');
+    card.append(el('div', 'empty', state.zones.length ? '조건에 맞는 도메인이 없습니다.' : '불러오는 중…'));
+    view.append(card); syncSel(); return;
+  }
+
+  const card = el('div', 'card');
+  const table = el('table');
+
+  const thead = el('thead'), hr = el('tr');
+  const chkAll = el('input'); chkAll.type = 'checkbox';
+  chkAll.checked = rows.every((z) => state.selected.has(z.id));
+  chkAll.onchange = () => { rows.forEach((z) => chkAll.checked ? state.selected.add(z.id) : state.selected.delete(z.id)); render(); };
+  const thc = el('th', 'c'); thc.style.width = '38px'; thc.append(chkAll); hr.append(thc);
+  hr.append(el('th', null, '도메인'));
+  hr.append(el('th', 'c', '프록시'));
+  hr.append(el('th', 'c', 'SSL/TLS'));
+  hr.append(el('th', 'c', '캐시규칙'));
+  hr.append(el('th', 'c', 'Tiered'));
+  hr.append(el('th', 'c', 'Smart'));
+  hr.append(el('th', 'c', '그룹'));
+  thead.append(hr); table.append(thead);
+
+  const tb = el('tbody');
+  for (const z of rows) {
+    const tr = el('tr');
+
+    const tdc = el('td', 'c');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = state.selected.has(z.id);
+    cb.onchange = () => { cb.checked ? state.selected.add(z.id) : state.selected.delete(z.id); syncSel(); };
+    tdc.append(cb); tr.append(tdc);
+
+    const tdn = el('td');
+    const d = el('span', 'dom');
+    d.append(el('span', 'caret', state.expanded.has(z.id) ? '▼' : '▶'));
+    d.append(el('span', 'dname', z.name));
+    d.onclick = () => toggleRecords(z);
+    tdn.append(d);
+    if (z.status !== 'active') tdn.append(el('span', 'chip bad', z.status));
+    if (z.type === 'partial') tdn.append(el('span', 'chip warn', 'partial'));
+    if (z.autoMode === 'auto') {
+      const c = el('span', 'chip warn', 'SSL Auto');
+      c.title = 'Automatic SSL/TLS가 켜져 있습니다. 값을 바꾸면 자동으로 Custom으로 전환합니다.';
+      tdn.append(c);
+    }
+    tr.append(tdn);
+
+    tr.append(cloudCell(z));
+    tr.append(sslCell(z));
+
+    const tdc2 = el('td', 'c');
+    if (z.cacheRule === true) {
+      const c = el('span', 'chip ok', '적용');
+      c.title = '정적파일 캐시 규칙이 걸려 있습니다';
+      tdc2.append(c);
+    } else if (z.cacheRule === false) {
+      tdc2.append(el('span', 'chip', '없음'));
+    } else {
+      tdc2.append(el('span', 'cloud na', '···'));
+    }
+    tr.append(tdc2);
+
+    const tdt = el('td', 'c');
+    if (z.tiered === true) tdt.append(el('span', 'chip ok', 'ON'));
+    else if (z.tiered === false) tdt.append(el('span', 'chip', 'OFF'));
+    else tdt.append(el('span', 'cloud na', '···'));
+    tr.append(tdt);
+
+    const tds2 = el('td', 'c');
+    if (z.smart === true) tds2.append(el('span', 'chip ok', 'ON'));
+    else if (z.smart === false) tds2.append(el('span', 'chip', 'OFF'));
+    else tds2.append(el('span', 'cloud na', '···'));
+    tr.append(tds2);
+
+    const tdg = el('td', 'c');
+    const gs = el('select'); gs.className = 'tiny';
+    gs.append(new Option('미분류', '__none__', false, !z.group));
+    for (const g of groupNames()) gs.append(new Option(g, g, false, z.group === g));
+    gs.onchange = async () => {
+      if (gs.value === '__none__') { delete state.groups.map[z.name]; z.group = null; }
+      else { state.groups.map[z.name] = gs.value; z.group = gs.value; }
+      await saveGroups(); renderTabs(); render();
+    };
+    tdg.append(gs); tr.append(tdg);
+    tb.append(tr);
+
+    if (state.expanded.has(z.id)) {
+      const rtr = el('tr'), rtd = el('td', 'recs');
+      rtd.colSpan = 8; rtd.append(recordsTable(z));
+      rtr.append(rtd); tb.append(rtr);
+    }
+  }
+  table.append(tb); card.append(table); view.append(card);
+  syncSel();
+}
+
+// 주황 구름 = Proxied 개수, 회색 구름 = DNS only 개수. 그게 전부다.
+// 주황을 누르면 전부 Proxied 로, 회색을 누르면 전부 DNS only 로 바꾼다.
+function cloudCell(z) {
+  const td = el('td', 'c');
+  if (!z.summary) { td.append(el('span', 'cloud na', '···')); return td; }
+
+  const total = (z.ipCounts || {})[state.serverIp] || 0;
+  const on = z.onCount || 0;
+  const off = total - on;
+
+  if (!total) {
+    const c = el('span', 'cloud na', '—');
+    c.title = state.serverIp + ' 를 가리키는 레코드가 없습니다';
+    td.append(c); return td;
+  }
+
+  const mk = (proxied, n) => {
+    const c = el('span', 'cloud ' + (proxied ? 'on' : 'off') + (n ? '' : ' zero'));
+    c.append(cloudSvg(proxied ? 'var(--cf-orange)' : 'var(--gray-cloud)'));
+    c.append(el('span', 'cnt', String(n)));
+    c.title = proxied
+      ? 'Proxied ' + n + '건 — 클릭하면 이 도메인을 전부 Proxied 로'
+      : 'DNS only ' + n + '건 — 클릭하면 이 도메인을 전부 DNS only 로';
+    c.onclick = () => askChange([z], 'proxy', proxied);
+    return c;
+  };
+
+  const wrap = el('span', 'clouds');
+  wrap.append(mk(true, on));
+  wrap.append(mk(false, off));
+  td.append(wrap);
+  return td;
+}
+
+function sslCell(z) {
+  const td = el('td', 'c');
+  if (!z.ssl) { td.append(el('span', 'ssl load', '···')); return td; }
+  const b = el('span', 'ssl ' + z.ssl, SSL_LABEL[z.ssl] || z.ssl);
+  b.title = '클릭하면 SSL/TLS 모드를 바꿉니다';
+  b.onclick = async () => {
+    const next = await askChoice(z.name + ' — SSL/TLS 모드', SSL_CHOICES, z.ssl);
+    if (next) askChange([z], 'ssl', next);
+  };
+  td.append(b); return td;
+}
+
+async function loadRecords(z) {
+  const d = await api('/api/records', { method: 'POST', body: JSON.stringify({ zoneId: z.id }) });
+  state.records[z.id] = d.records;
+  z.ssl = d.ssl; z.autoMode = d.autoMode; z.summary = d.summary; z.stale = false;
+}
+
+async function toggleRecords(z) {
+  if (state.expanded.has(z.id)) { state.expanded.delete(z.id); render(); return; }
+  state.expanded.add(z.id); render();
+  try { await loadRecords(z); render(); }
+  catch (e) { alert('레코드 조회 실패: ' + e.message); }
+}
+
+function toAscii(h) { try { return new URL('http://' + h).hostname; } catch (e) { return h; } }
+function short(n, z) {
+  if (!z) return n;
+  const cands = z === toAscii(z) ? [z] : [z, toAscii(z)];
+  for (const zz of cands) {
+    if (n === zz) return '@';
+    if (n.endsWith('.' + zz)) return n.slice(0, -(zz.length + 1));
+  }
+  return n;
+}
+
+// 대상 서버 IP 가 아닌 레코드는 전부 보호 — 건드리지 않는다
+const isProt = (r) => r.content !== state.serverIp;
+
+function recordsTable(z) {
+  const recs = state.records[z.id];
+  if (!recs) return el('div', 'empty', '레코드 불러오는 중…');
+
+  const t = el('table'), thead = el('thead'), hr = el('tr');
+  hr.append(el('th', null, '이름'));
+  hr.append(el('th', null, '타입'));
+  hr.append(el('th', null, '값'));
+  hr.append(el('th', 'c', '프록시'));
+  thead.append(hr); t.append(thead);
+
+  const tb = el('tbody');
+  for (const r of recs) {
+    const prot = isProt(r);
+    const tr = el('tr', prot ? 'protrow' : '');
+    const tdn = el('td');
+    tdn.append(short(r.name, z.name));
+    if (prot) {
+      const c = el('span', 'chip bad', '보호');
+      c.title = state.serverIp + ' 가 아니라 ' + r.content + ' 를 가리킵니다. 일괄 변경 대상이 아닙니다.';
+      tdn.append(c);
+    }
+    tr.append(tdn);
+    tr.append(el('td', 'mono', r.type));
+    tr.append(el('td', 'mono', r.content.length > 46 ? r.content.slice(0, 46) + '…' : r.content));
+
+    const tdp = el('td', 'c');
+    if (!r.proxiable || ['A','AAAA','CNAME'].indexOf(r.type) === -1) {
+      const c = el('span', 'cloud na'); c.append(cloudSvg('currentColor')); c.append(el('span', 'cnt', '불가'));
+      c.title = r.type + ' 타입이거나 사설 IP라 프록시할 수 없습니다';
+      tdp.append(c);
+    } else {
+      const c = el('span', 'cloud ' + (r.proxied ? 'on' : 'off'));
+      c.append(cloudSvg(r.proxied ? 'var(--cf-orange)' : 'var(--gray-cloud)'));
+      c.append(el('span', 'cnt', r.proxied ? 'Proxied' : 'DNS only'));
+      c.onclick = () => askChange([z], 'proxy', !r.proxied, { [z.id]: [r.id] }, 'manual');
+      tdp.append(c);
+    }
+    tr.append(tdp); tb.append(tr);
+  }
+  t.append(tb); return t;
+}
+
+function syncSel() {
+  const n = state.selected.size;
+  $('#moveBar').classList.toggle('off', !n);   // 체크 0 이면 감춘다 (자리는 유지)
+  updateScopeInfo();
+}
+
+// ── dry-run → 적용 ───────────────────────────────────────────
+
+// 미리보기 없이 바로 실행 (캐시 규칙용)
+async function runDirect(zones, action, value, title) {
+  const zs = zones.map((z) => ({ id: z.id, name: z.name }));
+  if (!zs.length) return;
+
+  const chunks = [];
+  for (let i = 0; i < zs.length; i += state.maxZones) chunks.push(zs.slice(i, i + state.maxZones));
+
+  state.busy = true;
+  showOverlay(title, 0, zs.length);
+
+  const merged = [];
+  try {
+    for (let i = 0; i < chunks.length; i++) {
+      const out = await api('/api/apply', {
+        method: 'POST',
+        body: JSON.stringify({ zones: chunks[i], action: action, value: value }),
+      });
+      merged.push.apply(merged, out.result || []);
+      showOverlay(title, Math.min((i + 1) * state.maxZones, zs.length), zs.length);
+    }
+  } catch (e) {
+    alert('실패: ' + e.message);
+  } finally {
+    state.busy = false;
+    hideOverlay();
+  }
+
+  const changed = merged.filter((r) => r.targets && r.targets.length).length;
+  const failed = merged.filter((r) => r.error);
+  $('#freshness').textContent = title + ' 완료 — ' + changed + '개 변경' +
+    (failed.length ? ', ' + failed.length + '개 실패' : '');
+  if (failed.length) {
+    alert(failed.length + '개 실패\n\n' + failed.slice(0, 20).map((f) => f.zone + ': ' + f.error).join('\n'));
+  }
+
+  await loadZones(true);
+  await fillStatus(false);
+  render();
+}
+
+async function askChange(zones, action, value, manual, forceMode) {
+  const mode = forceMode || state.scope.mode;
+  const ip = mode === 'ip' ? state.scope.ip : null;
+  const zs = zones.map((z) => ({ id: z.id, name: z.name }));
+
+  // combo = 프록시와 SSL 을 한 번에. 버튼 한 번으로 둘 다 바꾼다.
+  const ops = action === 'combo'
+    ? [{ action: 'proxy', value: value.proxied }, { action: 'ssl', value: value.ssl }]
+    : [{ action: action, value: value }];
+
+  $('#dlgH').textContent = '현재 상태를 다시 확인하는 중…';
+  $('#dlgB').innerHTML = '<div class="empty">조회 중…</div>';
+  $('#dlgOk').disabled = true;
+  $('#dlg').showModal();
+
+  // Workers 무료 플랜의 subrequest 제한 때문에 zone 을 나눠 보내고 결과를 합친다
+  const chunks = [];
+  for (let i = 0; i < zs.length; i += state.maxZones) chunks.push(zs.slice(i, i + state.maxZones));
+
+  async function callAll(endpoint, op, onProgress) {
+    const merged = { result: [], logged: 0 };
+    for (let i = 0; i < chunks.length; i++) {
+      if (onProgress) onProgress(Math.min(i * state.maxZones, zs.length), zs.length);
+      else if (chunks.length > 1) {
+        $('#dlgH').textContent = '확인 중… ' + Math.min((i + 1) * state.maxZones, zs.length) + ' / ' + zs.length;
+      }
+      const out = await api(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ zones: chunks[i], action: op.action, value: op.value, mode, manual, ip }),
+      });
+      merged.result = merged.result.concat(out.result || []);
+      merged.logged += out.logged || 0;
+      if (onProgress) onProgress(Math.min((i + 1) * state.maxZones, zs.length), zs.length);
+    }
+    return merged;
+  }
+
+  const previews = [];
+  try {
+    for (const op of ops) previews.push({ op: op, pv: await callAll('/api/preview', op) });
+  } catch (e) {
+    $('#dlgB').innerHTML = '<div class="notice">' + e.message + '</div>';
+    return;
+  }
+
+  const count = (pv) => pv.result.reduce((a, r) => a + (r.targets ? r.targets.length : 0), 0);
+  const total = previews.reduce((a, x) => a + count(x.pv), 0);
+
+  const title = action === 'combo'
+    ? (value.proxied ? 'Proxied + Flexible' : 'DNS only + Full')
+    : action === 'cache' ? (value ? '정적파일 캐시 규칙 적용' : '정적파일 캐시 규칙 제거')
+    : action === 'ssl' ? 'SSL/TLS → ' + (SSL_LABEL[value] || value)
+    : (value ? 'Proxied' : 'DNS only');
+  $('#dlgH').textContent = title + '  —  도메인 ' + zs.length + '개 · 변경 ' + total + '건';
+
+  const b = $('#dlgB'); b.innerHTML = '';
+
+  for (const { op, pv } of previews) {
+    const n = count(pv);
+
+    if (ops.length > 1) {
+      const h = el('div', 'seclabel',
+        (op.action === 'ssl' ? 'SSL/TLS → ' + (SSL_LABEL[op.value] || op.value)
+                             : '프록시 → ' + (op.value ? 'Proxied' : 'DNS only')) + '  (' + n + '건)');
+      b.append(h);
+    }
+    if (op.action === 'ssl' && op.value === 'flexible') {
+      b.append(el('div', 'notice amber', '⚠ Flexible 은 원서버가 HTTPS 로 리다이렉트하면 무한 리다이렉트를 일으킵니다.'));
+    }
+
+    for (const r of pv.result) {
+      const box = el('div', 'zblock');
+      box.append(el('h4', null, r.zone));
+      if (r.error) box.append(el('div', 'chg', '⚠ ' + r.error));
+      // 바뀌는 것과 안 바뀌는 것을 한 표에 모두 보여준다
+      const PROXYABLE = ['A', 'AAAA', 'CNAME'];
+      const txt = (v) => (v ? 'Proxied' : 'DNS only');
+      const rows = [];
+
+      // ssl / cache 는 before·after 가 이미 사람이 읽는 문자열이다
+      const rawKind = (r.kind === 'ssl' || r.kind === 'cache');
+      for (const t of r.targets) {
+        rows.push({
+          name: t.name, type: t.type,
+          before: rawKind ? t.before : txt(t.before),
+          after:  rawKind ? t.after  : txt(t.after),
+          changed: true, warn: t.warn, reason: null,
+        });
+      }
+      for (const x of (r.skipped || [])) {
+        const na = !rawKind && (PROXYABLE.indexOf(x.type) === -1 || !x.proxiable);
+        const cur = r.kind === 'cache' ? '—'
+                  : r.kind === 'ssl' ? (SSL_LABEL[z0ssl(r)] || '')
+                  : (na ? '—' : txt(x.before));
+        rows.push({
+          name: x.name, type: x.type,
+          before: cur, after: cur, changed: false, warn: null, reason: x.reason,
+        });
+      }
+
+      const RANK = { '@': 0, 'www': 1, 'm': 2 };
+      const byName = (a, b) => {
+        const ra = RANK[a.name] != null ? RANK[a.name] : 9;
+        const rb = RANK[b.name] != null ? RANK[b.name] : 9;
+        return ra - rb || a.name.localeCompare(b.name);
+      };
+      // 바뀌는 것 위, 그대로인 것 아래
+      rows.sort((a, b) => (b.changed - a.changed) || byName(a, b));
+
+      const dt = el('table', 'difftbl');
+      const dh = el('tr');
+      dh.append(el('th', null, '이름'));
+      dh.append(el('th', null, '현재'));
+      dh.append(el('th', 'ar', ''));
+      dh.append(el('th', null, '변경 후'));
+      dh.append(el('th', null, ''));
+      const dth = el('thead'); dth.append(dh); dt.append(dth);
+
+      const db = el('tbody');
+      let drewSep = false;
+      for (const row of rows) {
+        // 변경분과 유지분 사이에 구분선
+        if (!row.changed && !drewSep && rows.some((x) => x.changed)) {
+          drewSep = true;
+          const sr = el('tr', 'sep'), std = el('td');
+          std.colSpan = 5; std.append(el('span', 'septxt', '변경 없음'));
+          sr.append(std); db.append(sr);
+        }
+        const tr = el('tr', row.changed ? '' : 'same');
+        tr.append(el('td', 'nm', row.name));
+        tr.append(el('td', 'v ' + stateCls(row.before), row.before));
+        tr.append(el('td', 'ar', row.changed ? '→' : ''));
+        tr.append(el('td', 'v ' + (row.changed ? 'strong ' : '') + stateCls(row.after), row.after));
+        tr.append(el('td', 'why', row.changed ? '' : (row.reason || '')));
+        db.append(tr);
+        if (row.warn) {
+          const wr = el('tr'), wtd = el('td');
+          wtd.colSpan = 5; wtd.append(el('span', 'wline', '⚠ ' + row.name + ' — ' + row.warn));
+          wr.append(wtd); db.append(wr);
+        }
+      }
+      dt.append(db);
+      box.append(dt);
+
+      b.append(box);
+    }
+  }
+
+  $('#dlgOk').disabled = total === 0;
+  $('#dlgOk').textContent = total ? total + '건 적용' : '변경할 항목 없음';
+  $('#dlgOk').onclick = async () => {
+    state.busy = true;                      // 중단 기능이 없으므로 적용 중엔 닫기를 막는다
+    $('#dlgOk').disabled = true;
+    $('#dlgCancel').disabled = true;
+
+    const bar = $('#dlgProg');
+    bar.classList.remove('hide');
+    const step = (done, all, opIdx) => {
+      const base = opIdx / ops.length, span = 1 / ops.length;
+      const pct = Math.round((base + span * (all ? done / all : 1)) * 100);
+      bar.firstElementChild.style.width = pct + '%';
+      $('#dlgOk').textContent = '적용 중… ' + pct + '%';
+      $('#dlgH').textContent = title + '  —  ' + done + ' / ' + all + ' 도메인';
+    };
+    step(0, zs.length, 0);
+
+    try {
+      const outs = [];
+      for (let oi = 0; oi < ops.length; oi++) {
+        outs.push(await callAll('/api/apply', ops[oi], (d, a) => step(d, a, oi)));
+      }
+      $('#dlg').close();
+      showResult({ result: outs.reduce((a, o) => a.concat(o.result), []) });
+      // 펼쳐둔 행은 닫지 않고 내용만 다시 읽는다
+      await loadZones(true);
+      await fillStatus(false);
+      for (const z of zs) {
+        if (!state.expanded.has(z.id)) { delete state.records[z.id]; continue; }
+        const live = state.zones.find((x) => x.id === z.id);
+        if (live) { try { await loadRecords(live); } catch (e) {} }
+      }
+      render();
+    } catch (e) { alert('실패: ' + e.message); }
+    finally {
+      state.busy = false;
+      bar.classList.add('hide');
+      bar.firstElementChild.style.width = '0';
+      $('#dlgCancel').disabled = false;
+      $('#dlgOk').textContent = total + '건 적용';
+      $('#dlgOk').disabled = false;
+    }
+  };
+}
+
+function showResult(out) {
+  let ok = 0, fail = 0;
+  for (const r of out.result) {
+    if (r.results) { ok += r.results.filter((c) => c.ok).length; fail += r.results.filter((c) => !c.ok).length; }
+    else if (r.applied) ok++;
+    else if (r.error) fail++;
+  }
+  if (!fail) return;
+  const lines = [];
+  for (const r of out.result) {
+    if (r.error) lines.push(r.zone + ': ' + r.error);
+    for (const c of (r.results || [])) if (!c.ok) lines.push(r.zone + ' / ' + c.name + ': ' + c.error);
+  }
+  alert('성공 ' + ok + '건, 실패 ' + fail + '건\n\n' + lines.join('\n'));
+}
+
+// ── 변경 이력 ───────────────────────────────────────────────
+// 왼쪽 메뉴의 '변경 이력'(/#log) ↔ 'DNS · SSL/TLS'(/) — 주소의 #log 를 보고 화면을 바꾼다
+let logOpen = false;
+async function syncView() {
+  const want = location.hash === '#log';
+  if (want === logOpen) return;
+  logOpen = want;
+  document.body.classList.toggle('logmode', logOpen); // 변경 이력에서는 그룹 탭 · 실행 버튼을 숨긴다
+  $('#view').classList.toggle('hide', logOpen);
+  $('#logView').classList.toggle('hide', !logOpen);
+  $('#pageTitle').textContent = logOpen ? '변경 이력' : 'DNS · SSL/TLS';
+  if (!logOpen) {
+    updateFreshness();
+    if (fillPending) { fillPending = false; fillStatus(false).then(() => fillConfig(false)); }
+    return;
+  }
+  await renderLog();
+}
+
+// '2026-09-25 13:26:34' → '2026-09-25(금) 13:26:34' (저장된 시각은 KST 그대로, 화면에만 요일)
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+function withDay(ts) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(ts || '');
+  if (!m) return ts || '';
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay();
+  return m[1] + '-' + m[2] + '-' + m[3] + '(' + DAYS[d] + ')' + m[4];
+}
+
+async function renderLog() {
+  const wrap = $('#logView');
+  wrap.innerHTML = '<div class="card"><div class="empty">불러오는 중…</div></div>';
+  const d = await api('/api/log?limit=300');
+  $('#freshness').textContent = '최근 ' + d.entries.length + '건';
+
+  const card = el('div', 'card');
+  if (!d.entries.length) card.append(el('div', 'empty', '변경 이력이 없습니다.'));
+
+  for (const e of d.entries) {
+    const row = el('div', 'logrow' + (e.action === 'proxy-fail' ? ' fail' : '') + (e.reverted ? ' rev' : ''));
+    row.append(el('span', 't', withDay(e.ts)));
+    row.append(el('span', 'z', e.zone));
+    row.append(el('span', 'l', e.label));
+    if (e.by) row.append(el('span', 'by', e.by));
+    if (!e.reverted && (e.action === 'proxy' || e.action === 'ssl')) {
+      const b = el('button', 'tiny', '되돌리기');
+      b.onclick = async () => {
+        if (!confirm(e.zone + '\n' + e.label + '\n\n되돌릴까요?')) return;
+        b.disabled = true; b.textContent = '…';
+        try { await api('/api/revert', { method: 'POST', body: JSON.stringify({ id: e.id }) }); await renderLog(); await loadZones(); }
+        catch (err) { alert('되돌리기 실패: ' + err.message); b.disabled = false; b.textContent = '되돌리기'; }
+      };
+      row.append(b);
+    }
+    card.append(row);
+  }
+  wrap.innerHTML = ''; wrap.append(card);
+}
+
+// ── 이벤트 ──────────────────────────────────────────────────
+$('#btnCacheOn').onclick = () => {
+  const zs = targetZones();
+  if (!zs.length) return;
+  if (!confirm('체크한 ' + zs.length + '개 도메인에 정적파일 캐시 규칙을 적용합니다.\n\n진행할까요?')) return;
+  runDirect(zs, 'cache', true, '정적파일 캐시 규칙 적용');
+};
+$('#btnSmartOn').onclick = () => {
+  const zs = targetZones();
+  if (!zs.length) return;
+  if (!confirm('체크한 ' + zs.length + '개 도메인의 Smart Tiered Cache 를 켭니다. (Tiered Cache 스위치가 꺼져 있으면 함께 켭니다) 진행할까요?')) return;
+  runDirect(zs, 'smart', true, 'Smart Tiered Cache 켜기');
+};
+$('#btnSmartOff').onclick = () => {
+  const zs = targetZones();
+  if (!zs.length) return;
+  if (!confirm('체크한 ' + zs.length + '개 도메인의 Smart Tiered Cache 를 끕니다. 진행할까요?')) return;
+  runDirect(zs, 'smart', false, 'Smart Tiered Cache 끄기');
+};
+$('#btnTierOn').onclick = () => {
+  const zs = targetZones();
+  if (!zs.length) return;
+  if (!confirm('체크한 ' + zs.length + '개 도메인의 Tiered Cache 를 켭니다.\n\n진행할까요?')) return;
+  runDirect(zs, 'tiered', true, 'Tiered Cache 켜기');
+};
+$('#btnTierOff').onclick = () => {
+  const zs = targetZones();
+  if (!zs.length) return;
+  if (!confirm('체크한 ' + zs.length + '개 도메인의 Tiered Cache 를 끕니다.\n\n진행할까요?')) return;
+  runDirect(zs, 'tiered', false, 'Tiered Cache 끄기');
+};
+$('#btnCacheOff').onclick = () => {
+  const zs = targetZones();
+  if (!zs.length) return;
+  if (!confirm('체크한 ' + zs.length + '개 도메인에서 정적파일 캐시 규칙을 제거합니다.\n\n진행할까요?')) return;
+  runDirect(zs, 'cache', false, '정적파일 캐시 규칙 제거');
+};
+$('#btnProxyOn').onclick  = () => askChange(targetZones(), 'combo', { proxied: true,  ssl: 'flexible' });
+$('#btnProxyOff').onclick = () => askChange(targetZones(), 'combo', { proxied: false, ssl: 'full' });
+
+$('#btnNewGroup').onclick = async () => {
+  const name = await askText('새 그룹 만들기', '', '예: A그룹');
+  if (!name) return;
+  if (state.groups.order.indexOf(name) !== -1) return alert('이미 있는 그룹입니다.');
+  state.groups.order.push(name);
+  state.tab = name;
+  await saveGroups(); renderTabs(); renderBar(); render();
+};
+
+$('#btnRenameGroup').onclick = () => renameGroup(state.tab);
+$('#btnDelGroup').onclick = () => deleteGroup(state.tab);
+
+// 새로고침 = SSL·프록시만 (가벼움). 설정은 '설정 다시 읽기' 로 따로.
+$('#btnRefresh').onclick = async () => { if (loadRunning) return; await loadZones(); await fillStatus(true); };
+$('#btnConfig').onclick = async () => { if (loadRunning) return; await fillConfig(true); };
+window.addEventListener('shell:route', syncView);
+$('#dlgCancel').onclick = () => { if (!state.busy) $('#dlg').close(); };
+
+// 바깥(백드롭) 클릭은 취소와 동일. 적용 중에는 막는다.
+for (const id of ['#dlg']) {
+  $(id).addEventListener('mousedown', (ev) => {
+    if (state.busy) return;
+    if (ev.target === ev.currentTarget) ev.currentTarget.close();
+  });
+}
+// ESC 도 적용 중에는 막는다
+$('#dlg').addEventListener('cancel', (ev) => { if (state.busy) ev.preventDefault(); });
+
+setBusyCheck(() => state.busy); // 적용 중엔 로그아웃·작은 창 닫기를 막는다
+boot();
+syncView();
+</script>
+</body>
+</html>

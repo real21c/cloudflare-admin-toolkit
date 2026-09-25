@@ -1,0 +1,1117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IP Rules · Cloudflare Admin Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shell.css">
+<style>
+  /* IP 룰 — cf-ip-rules-manager 화면을 툴킷 스타일로 옮긴 것 */
+  :root { --mono: ui-monospace, Consolas, "Cascadia Mono", monospace; }
+  [hidden] { display: none !important; }
+  .ipmain { padding: 0 20px 20px; }
+
+  /* 제목·검색·분류 버튼·선택 바까지 한 덩어리로 위에 고정. 표 머리글은 그 아래(--hdr)에 붙는다 */
+  #top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: 16px; }
+  .iphead { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+  .iphead h1 { margin: 0; }
+  .stats { color: var(--dim); font-size: 13px; }
+  .stats b { color: var(--text); font-weight: 600; }
+  .iphead .right { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12.5px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 0 6px; }
+  .toolbar input[type=text] { flex: 1; min-width: 260px; }
+  .cats { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 4px 0 10px; }
+  .cats .sep { width: 1px; height: 22px; background: var(--line); margin: 0 6px; }
+  .cats button b { font-weight: 600; margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .cat { display: inline-flex; align-items: center; gap: 6px; }
+  .cat::before { content: ''; width: 8px; height: 8px; background: var(--dimmer); }
+  .cat.attack::before { background: var(--red); }
+  .cat.clean::before { background: var(--green); }
+  .cat.all::before { background: var(--cf-blue); }
+  .cat.active, .date.active, .pth.active { border-color: var(--cf-blue); background: var(--cf-blue-bg); }
+  .bulk {
+    display: flex; gap: 8px; align-items: center; padding: 8px 12px; margin-bottom: 10px;
+    background: var(--cf-blue-bg); border: 1px solid var(--cf-blue);
+  }
+  .bulk b { color: var(--cf-blue); }
+  .banner { margin: 0 0 10px; padding: 10px 14px; border-left: 3px solid var(--red); background: var(--red-bg); color: var(--red); font-size: 13.5px; white-space: pre-wrap; }
+  .banner.amber { border-left-color: var(--amber); background: var(--amber-bg); color: var(--amber); }
+
+  /* 표 — 이 페이지 표에만 적용 (공통 창의 표와 섞이지 않게) */
+  .iptbl { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--panel); border: 1px solid var(--line); }
+  .iptbl th, .iptbl td { padding: 7px 8px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; font-size: 13px; }
+  .iptbl th {
+    color: var(--dim); font-weight: 600; font-size: 11.5px; letter-spacing: .03em; background: var(--panel);
+    border-bottom: 1px solid var(--line); position: sticky; top: var(--hdr, 150px); z-index: 4; white-space: nowrap;
+  }
+  .iptbl th.sortable { cursor: pointer; user-select: none; }
+  .iptbl th.sortable:hover { color: var(--text); }
+  .iptbl th .arrow { color: var(--cf-blue); margin-left: 4px; }
+  .iptbl tbody tr:hover td { background: var(--bg); }
+  .iptbl tr.selected td { background: var(--cf-blue-bg); }
+  .iptbl td.ip { font-family: var(--mono); white-space: nowrap; font-size: 12.5px; }
+  .iptbl td.ip > .ipwrap { display: flex; align-items: center; min-width: 0; }
+  .iptbl td.ip .ipval { overflow: hidden; text-overflow: ellipsis; }
+  .iptbl td.time { font-family: var(--mono); white-space: nowrap; font-size: 12.5px; color: var(--dim); }
+  .iptbl td.url, .iptbl td.ua { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .iptbl td.ua { color: var(--dim); }
+  .iptbl td.url .host { color: var(--dimmer); }
+  .uri.attack { color: var(--red); }
+  .uri.gray { color: var(--text); }
+  .uri.clean { color: var(--green); }
+  .uri mark { color: inherit; font-weight: 700; background: var(--line-soft); padding: 0 1px; }
+  .uri.attack mark { background: var(--red-bg); }
+  .uri.clean mark { background: var(--green-bg); }
+  .iptbl td.act { white-space: nowrap; }
+  .iptbl td.act select { height: 26px; padding: 0 22px 0 6px; font-size: 12.5px; }
+  select.mode.block { color: var(--red); }
+  select.mode.challenge, select.mode.managed_challenge, select.mode.js_challenge { color: var(--amber); }
+  select.mode.whitelist { color: var(--green); }
+  .tag { display: inline-block; font-size: 10.5px; padding: 0 5px; background: var(--line-soft); color: var(--dim); margin-left: 6px; vertical-align: middle; }
+  .tag.pair { background: var(--green-bg); color: var(--green); }
+  .dot { display: inline-block; width: 8px; height: 8px; background: var(--dimmer); margin-right: 7px; vertical-align: middle; }
+  .dot.attack { background: var(--red); }
+  .dot.clean { background: var(--green); }
+  button.icon { height: 24px; padding: 0 7px; font-size: 12px; line-height: 1; }
+  button.flag { height: 20px; padding: 0 5px; font-size: 11px; color: var(--dim); background: transparent; border-color: transparent; margin-left: 4px; vertical-align: middle; }
+  button.flag:hover { color: var(--text); border-color: var(--line); background: var(--panel); }
+  .pager { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 12px; color: var(--dim); }
+  #loading { padding: 40px; text-align: center; color: var(--dim); background: var(--panel); border: 1px solid var(--line); }
+
+  /* 알림 */
+  #toast { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 70; }
+  .toast {
+    background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--cf-blue);
+    padding: 10px 14px; min-width: 240px; max-width: 480px; box-shadow: 0 6px 20px rgba(0,0,0,.25); white-space: pre-wrap; font-size: 13px;
+  }
+  .toast.ok { border-left-color: var(--green); }
+  .toast.err { border-left-color: var(--red); }
+
+  /* 분류 규칙 창 */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow: auto; }
+  .modal-box { background: var(--panel); border: 1px solid var(--line); width: min(1100px, 100%); max-height: calc(100vh - 80px); display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+  .modal-head { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--bg); }
+  .modal-head h2 { margin: 0; font-size: 15px; }
+  .modal-head .labels { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; }
+  .modal-head .labels input { width: 80px; height: 28px; padding: 0 8px; }
+  .modal-head .close { margin-left: auto; }
+  .rule-add { display: flex; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
+  .rule-add input.pat { flex: 2; min-width: 240px; font-family: var(--mono); }
+  .rule-add input.note { flex: 1; min-width: 160px; }
+  .rule-add .hint { color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .rule-tabs { display: flex; gap: 6px; padding: 10px 18px 0; }
+  .rule-tabs button.active { border-color: var(--cf-blue); background: var(--cf-blue-bg); }
+  .rule-tabs button b { margin-left: 4px; color: var(--dim); font-weight: 600; }
+  .rule-list { overflow: auto; padding: 10px 18px 14px; }
+  .rule-list table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .rule-list th, .rule-list td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; font-size: 13px; }
+  .rule-list th { color: var(--dim); font-size: 11.5px; font-weight: 600; }
+  .rule-list input.pat { width: 100%; font-family: var(--mono); height: 28px; padding: 0 8px; }
+  .rule-list input.note { width: 100%; height: 28px; padding: 0 8px; }
+  .rule-list select { height: 28px; padding: 0 22px 0 6px; }
+  .rule-list .cnt { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  .rule-list .cnt.zero { color: var(--dimmer); }
+  .modal-foot { display: flex; gap: 10px; align-items: center; padding: 10px 18px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; flex-wrap: wrap; background: var(--bg); }
+  .modal-foot .spacer { flex: 1; }
+  .pill { display: inline-block; font-size: 10.5px; padding: 1px 6px; background: var(--line-soft); color: var(--dim); }
+
+  /* 일괄 처리 진행 화면 */
+  #progress { z-index: 55; background: rgba(0,0,0,.55); align-items: center; }
+  .prog-box { background: var(--panel); border: 1px solid var(--line); padding: 24px 28px; width: min(520px, 100%); text-align: center; box-shadow: 0 12px 48px rgba(0,0,0,.4); }
+  .prog-title { font-size: 15px; font-weight: 650; }
+  .prog-bar { height: 6px; background: var(--line-soft); overflow: hidden; margin: 16px 0 8px; }
+  #progFill { height: 100%; width: 0; background: var(--cf-orange); transition: width .2s; }
+  .prog-text { font-family: var(--mono); font-size: 14px; }
+  .prog-sub { color: var(--dim); font-size: 12.5px; min-height: 18px; margin: 4px 0 14px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#f6821f" d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+    </svg>
+    Cloudflare Admin Toolkit
+  </span>
+  <span class="grow"></span>
+  <span class="meta" id="fetchedAt"></span>
+  <button class="tiny" id="btnRefresh" title="Cloudflare 에서 전체 목록 다시 가져오기">↻ 새로고침</button>
+  <button class="tiny hide" id="btnOtp" title="로그인할 때 구글 OTP 6자리를 함께 받습니다">2단계 인증</button>
+  <button class="tiny hide" id="btnLogout">로그아웃</button>
+</div>
+
+<div class="app">
+<nav id="side" class="side"></nav>
+<main class="main">
+<div class="ipmain">
+
+<div id="top">
+  <div class="iphead">
+    <h1>IP Rules</h1>
+    <div class="stats">전체 <b id="cntTotal">-</b> · 표시 <b id="cntShown">-</b> · 선택 <b id="cntSel">0</b></div>
+    <div class="right">
+      <select id="scopeSel" hidden title="계정 룰 / 자산존 룰"><option value="account">계정 룰</option><option value="zone">존 룰</option></select>
+    </div>
+  </div>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="toolbar">
+    <input type="text" id="q" placeholder="검색 — IP, URL, User-Agent, 시간. 여러 단어는 공백으로 구분(모두 포함). Esc 로 지우기">
+    <select id="field" title="검색 대상">
+      <option value="all">전체</option>
+      <option value="value">IP</option>
+      <option value="url">URL</option>
+      <option value="ua">User-Agent</option>
+      <option value="time">시간</option>
+    </select>
+    <select id="modeFilter" title="Action 필터">
+      <option value="">Action 전체</option>
+      <option value="block">Block</option>
+      <option value="challenge">Interactive Challenge</option>
+      <option value="managed_challenge">Managed Challenge</option>
+      <option value="js_challenge">JS Challenge</option>
+      <option value="whitelist">Allow</option>
+    </select>
+    <select id="pageSize" title="페이지당 표시 수">
+      <option value="100">100개씩</option>
+      <option value="300">300개씩</option>
+      <option value="1000">1000개씩</option>
+      <option value="0">전체 표시</option>
+    </select>
+  </section>
+
+  <section class="cats" id="cats">
+    <button class="cat all active" data-cat=""><span class="lbl">전체</span><b>-</b></button>
+    <button class="cat attack" data-cat="attack" title="URL 또는 User-Agent 가 뻔한 공격/스캔 패턴"><span class="lbl">위험</span><b>-</b></button>
+    <button id="btnBlockAll" class="danger" disabled hidden title="현재 목록의 위험 IP 에 남아 있는 자산존 Allow 룰만 삭제"><span class="lbl">위험</span>차단<b>-</b></button>
+    <button class="cat gray" data-cat="gray" title="위험도 안전도 아닌 나머지"><span class="lbl">애매</span><b>-</b></button>
+    <button class="cat clean" data-cat="clean" title="css/js/이미지/폰트/문서 등 정적 파일, 브라우저 자동 요청"><span class="lbl">안전</span><b>-</b></button>
+    <button id="btnRules" title="분류 규칙 조회/수정">⚙ 규칙</button>
+    <span class="sep"></span>
+    <button class="date active" data-date="">기간 전체<b>-</b></button>
+    <button class="date" data-date="today" title="추가시간이 오늘인 것">오늘<b>-</b></button>
+    <button class="date" data-date="before" title="추가시간이 어제 이전인 것">어제까지<b>-</b></button>
+    <span class="sep"></span>
+    <button class="pth" data-path="num6" title="경로가 숫자 6자리뿐인 것 (예: /193961 — 게시글 번호로 보이는 옛 링크)">숫자 6자리<b>-</b></button>
+  </section>
+
+  <section class="bulk" id="bulkBar" hidden>
+    선택 <b id="bulkCnt">0</b>건 →
+    <select id="bulkMode">
+      <option value="block">Block</option>
+      <option value="challenge">Interactive Challenge</option>
+      <option value="managed_challenge">Managed Challenge</option>
+      <option value="js_challenge">JS Challenge</option>
+      <option value="whitelist">Allow</option>
+    </select>
+    <button id="btnBulkMode">Action 변경</button>
+    <button id="btnBulkDelete" class="danger">선택 삭제</button>
+    <button id="btnClearSel">선택 해제</button>
+  </section>
+</div>
+
+<div id="loading">불러오는 중…</div>
+<div id="wrap" hidden>
+  <table class="iptbl">
+    <colgroup>
+      <col style="width:36px"><col style="width:170px"><col style="width:160px"><col style="width:32%"><col><col style="width:190px"><col style="width:44px">
+    </colgroup>
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="chkAll" title="검색 결과 전체 선택"></th>
+        <th class="sortable" data-key="value">IP</th>
+        <th class="sortable" data-key="time">추가시간</th>
+        <th class="sortable" data-key="url">URL</th>
+        <th>User-Agent</th>
+        <th class="sortable" data-key="mode">Action</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden>검색 결과가 없습니다.</div>
+  <div class="pager" id="pager">
+    <button id="first" title="처음">«</button><button id="prev">‹ 이전</button><span id="pageInfo"></span><button id="next">다음 ›</button><button id="last" title="마지막">»</button>
+  </div>
+</div>
+
+</div>
+</main>
+</div>
+
+<div id="rulesModal" class="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>분류 규칙</h2>
+      <div class="labels">
+        이름:
+        <input type="text" data-label="attack" maxlength="20" title="위험 분류 이름">
+        <input type="text" data-label="gray" maxlength="20" title="애매 분류 이름">
+        <input type="text" data-label="clean" maxlength="20" title="안전 분류 이름">
+        <button id="btnLabels">이름 저장</button>
+      </div>
+      <button id="btnRulesClose" class="close">닫기</button>
+    </div>
+    <div class="rule-add">
+      <select id="raCat"></select>
+      <select id="raField"><option value="url">URL 경로</option><option value="ua">User-Agent</option></select>
+      <select id="raType"><option value="text">문자열 포함</option><option value="regex">정규식</option></select>
+      <input type="text" id="raPattern" class="pat" placeholder="예: /.env   gcp-sa.json   /api/session/properties">
+      <input type="text" id="raNote" class="note" placeholder="설명 (선택)">
+      <span id="raCount" class="hint"></span>
+      <button id="btnRuleAdd">추가</button>
+    </div>
+    <div class="rule-tabs" id="ruleTabs">
+      <button data-tab="attack" class="active"><span class="lbl">위험</span><b></b></button>
+      <button data-tab="gray"><span class="lbl">애매</span><b></b></button>
+      <button data-tab="clean"><span class="lbl">안전</span><b></b></button>
+    </div>
+    <div class="rule-list">
+      <table>
+        <colgroup><col style="width:80px"><col style="width:90px"><col><col style="width:26%"><col style="width:70px"><col style="width:110px"><col style="width:52px"></colgroup>
+        <thead><tr><th>대상</th><th>방식</th><th>패턴 (대소문자 무시)</th><th>설명</th><th class="cnt">일치</th><th>분류 이동</th><th></th></tr></thead>
+        <tbody id="ruleBody"></tbody>
+      </table>
+      <div class="empty" id="ruleEmpty" hidden>이 분류에는 규칙이 없습니다.</div>
+    </div>
+    <div class="modal-foot">
+      <span>판정 순서: <b id="ordLbl"></b> → 아무 규칙에도 안 걸리면 <b id="defLbl"></b>. URL 규칙은 도메인을 뺀 경로(+쿼리)에, 안전 규칙은 쿼리를 뺀 경로에 적용. 수정하면 바로 저장됩니다.</span>
+      <span class="spacer"></span>
+      <button id="btnRulesReset">기본값 복원</button>
+    </div>
+  </div>
+</div>
+
+<div id="progress" class="modal" hidden>
+  <div class="prog-box">
+    <div class="prog-title" id="progTitle">처리 중…</div>
+    <div class="prog-bar"><div id="progFill"></div></div>
+    <div class="prog-text" id="progText">0 / 0</div>
+    <div class="prog-sub" id="progSub"></div>
+    <div class="prog-sub" id="progRate" title="Cloudflare API 한도는 5분에 1200회 (대시보드·404 가드와 합산). 그 아래로 스스로 늦춰서 처리합니다."></div>
+    <button id="progStop">중지</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+import { setBusyCheck } from '/shell.js';
+
+const MODE_LABEL = { block: 'Block', challenge: 'Interactive Challenge', managed_challenge: 'Managed Challenge', js_challenge: 'JS Challenge', whitelist: 'Allow' };
+const CATS = ['attack', 'gray', 'clean'];
+const $ = (id) => document.getElementById(id);
+const el = {
+  q: $('q'), field: $('field'), modeFilter: $('modeFilter'), pageSize: $('pageSize'),
+  tbody: $('tbody'), chkAll: $('chkAll'), bulkBar: $('bulkBar'), bulkCnt: $('bulkCnt'), bulkMode: $('bulkMode'),
+  cntTotal: $('cntTotal'), cntShown: $('cntShown'), cntSel: $('cntSel'), fetchedAt: $('fetchedAt'),
+  pageInfo: $('pageInfo'), prev: $('prev'), next: $('next'), first: $('first'), last: $('last'), pager: $('pager'), empty: $('empty'),
+  loading: $('loading'), wrap: $('wrap'), banner: $('banner'), scopeSel: $('scopeSel'),
+  cats: $('cats'), modal: $('rulesModal'), ruleBody: $('ruleBody'), ruleEmpty: $('ruleEmpty'), ruleTabs: $('ruleTabs'),
+  raCat: $('raCat'), raField: $('raField'), raType: $('raType'), raPattern: $('raPattern'), raNote: $('raNote'), raCount: $('raCount'),
+};
+
+let all = [], shown = [], selected = new Set();
+let page = 1, pages = 1, sortKey = 'time', sortDir = -1, scope = 'account', catFilter = '', dateFilter = '', pathFilter = '';
+// 경로 필터: num6 = "/193961" 처럼 숫자 6자리만 있는 경로 (쿼리 제외)
+const PATH_FILTERS = { num6: (r) => /^\/\d{6}$/.test(((r.pp && r.pp.path) || '').split('?')[0].split('#')[0]) };
+let configured = false, cfgOk = false, zoneEnabled = false, zoneName = '자산존', maxCalls = 40;
+// 자산존 Allow 룰 — IP → 그 IP 의 404 가드 Allow 룰 id 목록 (계정 룰을 지울 때 같이 지운다)
+// pairsOk — 자산존 Allow 목록을 제대로 받았는지. 못 받았으면 계정 룰 삭제·위험차단을 막는다 (자산존 Allow 가 고아로 남으므로)
+let pairs = new Map(), pairsOk = false;
+let loadedScope = 'account'; // 지금 표에 있는 목록의 범위 (불러오는 중 전환해도 섞이지 않게)
+let FCFG = { labels: { attack: '위험', gray: '애매', clean: '안전' }, rules: [] }, compiled = [], ruleTab = 'attack';
+const L = (c) => FCFG.labels[c] || c;
+let working = false; // 일괄 처리 중이면 로그아웃을 막는다
+setBusyCheck(() => working);
+
+// ---------- util ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function toast(msg, type = '', ms = 3500) {
+  const d = document.createElement('div');
+  d.className = 'toast ' + type; d.textContent = msg;
+  $('toast').appendChild(d);
+  setTimeout(() => d.remove(), ms);
+}
+function ipKey(v) {
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)/.exec(v || '');
+  return m ? ((+m[1]) * 16777216 + (+m[2]) * 65536 + (+m[3]) * 256 + (+m[4])) : Number.MAX_SAFE_INTEGER;
+}
+
+// ---------- Cloudflare API 한도 (브라우저가 센다) ----------
+// 한도는 사용자당 5분에 1200회이고 대시보드·404 가드와 합산된다. 이 화면은 900회(설정값) 아래로 스스로 늦춘다.
+// 서버가 응답마다 이번에 쓴 호출 수(calls)를 알려 주고, 429 면 retryAfter 만큼 멈춘다.
+// 새로고침해도 이어서 세도록 localStorage 에 남긴다 (못 쓰면 메모리만).
+const rate = { log: [], pausedUntil: 0, budget: 900, windowMs: 300000 };
+try { const v = JSON.parse(localStorage.getItem('ipRate') || 'null'); if (v && Array.isArray(v.log)) { rate.log = v.log; rate.pausedUntil = v.pausedUntil || 0; } } catch { /* 없음 */ }
+function rateSave() { try { localStorage.setItem('ipRate', JSON.stringify({ log: rate.log, pausedUntil: rate.pausedUntil })); } catch { /* 없음 */ } }
+function ratePrune() { const now = Date.now(); while (rate.log.length && now - rate.log[0] >= rate.windowMs) rate.log.shift(); }
+function noteCalls(n) { const t = Date.now(); for (let i = 0; i < n; i++) rate.log.push(t); ratePrune(); rateSave(); }
+function rateStatus(need = 0) {
+  ratePrune();
+  const now = Date.now();
+  let wait = Math.max(0, rate.pausedUntil - now);
+  const over = rate.log.length + need - rate.budget;
+  if (over > 0) wait = Math.max(wait, rate.log[Math.min(over, rate.log.length) - 1] + rate.windowMs - now);
+  return { used: rate.log.length, budget: rate.budget, waitMs: wait };
+}
+async function acquire(need, onWait) {
+  for (;;) {
+    const s = rateStatus(need);
+    if (s.waitMs <= 0) return;
+    if (onWait) onWait(s);
+    await sleep(Math.min(s.waitMs + 50, 1000));
+  }
+}
+function pauseFor(sec) { rate.pausedUntil = Math.max(rate.pausedUntil, Date.now() + Math.min(sec, 300) * 1000); rateSave(); }
+
+async function api(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) { location.href = '/login'; throw new Error('세션이 만료되었습니다.'); }
+  const j = await r.json().catch(() => ({}));
+  if (j && j.calls) noteCalls(j.calls);
+  if (j && j.rateLimited) pauseFor(j.retryAfter || 30);
+  if (!r.ok) {
+    const e = new Error(j.error || ('HTTP ' + r.status));
+    e.status = r.status; e.rate = !!j.rateLimited;
+    throw e;
+  }
+  return j;
+}
+const PERM_HELP = '토큰에 IP 룰 권한이 없습니다. Cloudflare → My Profile → API Tokens → 이 도구 토큰 → Edit 에서\n'
+  + '  Account · Account Firewall Access Rules · Edit\n  Zone · Firewall Services · Edit\n를 추가하세요. (토큰 값은 그대로라 다시 넣을 필요 없음)';
+function showError(prefix, e) {
+  el.banner.className = 'banner';
+  el.banner.textContent = prefix + (e.status === 403 ? '\n' + PERM_HELP + '\n(' + e.message + ')' : e.message);
+  el.banner.hidden = false;
+}
+
+// ---------- 분류 ----------
+// URL → { scheme, host, pathOrig(원문 경로+쿼리), path(소문자), dec(디코드+소문자) }
+function pathParts(u) {
+  const m = /^(\w+:\/\/)?([^\/]*)(\/.*)?$/.exec(u || '');
+  const scheme = m ? (m[1] || '') : '', host = m ? m[2] : '', pathOrig = (m && m[3]) || '';
+  const path = pathOrig.toLowerCase();
+  let dec = path, decFailed = false;
+  try { dec = decodeURIComponent(path.replace(/\+/g, ' ')).toLowerCase(); } catch { decFailed = true; }
+  // "x.php;.jpg", "x.php%00.css" 처럼 구분자로 확장자 검사를 속이는 것 대비: 제어문자·공백·; 를 / 로 바꾼 판본도 검사
+  const hard = dec.replace(/[\x00-\x20;]+/g, '/');
+  return { scheme, host, pathOrig, path, dec, hard, decFailed };
+}
+function compileFilters(cfg) {
+  FCFG = cfg;
+  compiled = cfg.rules.map((r) => {
+    let re = null;
+    if (r.type === 'regex') { try { re = new RegExp(r.pattern, 'i'); } catch { re = null; } }
+    return { ...r, re, text: r.pattern.toLowerCase() };
+  });
+  for (const b of document.querySelectorAll('#cats button.cat[data-cat], #ruleTabs button[data-tab]')) {
+    const c = b.dataset.cat || b.dataset.tab;
+    if (c) b.querySelector('.lbl').textContent = L(c);
+  }
+  $('btnBlockAll').querySelector('.lbl').textContent = L('attack');
+  el.raCat.innerHTML = CATS.map((c) => `<option value="${c}">${esc(L(c))}</option>`).join('');
+  for (const inp of document.querySelectorAll('.labels input[data-label]')) inp.value = L(inp.dataset.label);
+  $('ordLbl').textContent = CATS.map(L).join(' → ');
+  $('defLbl').textContent = L('gray');
+}
+// 규칙 하나가 행에 걸리는지. 걸리면 {start,end}(원문 경로 기준 위치, 있을 때만) 반환
+function matchRule(rule, r) {
+  if (rule.field === 'ua') {
+    const ua = (r.ua || '').toLowerCase();
+    if (!ua) return null;
+    // 404 가드가 notes 를 400자에서 자르므로, 꽉 찬 notes 의 UA 는 잘렸을 수 있어 UA 규칙을 적용하지 않는다
+    if ((r.notes || '').length >= 400) return null;
+    if (rule.re) return rule.re.test(ua) ? {} : null;
+    return ua.includes(rule.text) ? {} : null;
+  }
+  const pp = r.pp;
+  const full = pp.path || '/', fullDec = pp.dec || '/', hard = pp.hard || '/';
+  if (rule.cat === 'clean' && pp.decFailed) return null; // 인코딩이 깨진 URL 은 안전으로 보지 않는다
+  const subject = rule.cat === 'clean' ? full.split('?')[0].split('#')[0] : full;
+  const subjectDec = rule.cat === 'clean' ? fullDec.split('?')[0].split('#')[0] : fullDec;
+  if (rule.re) {
+    const m = rule.re.exec(subject);
+    if (m) return { start: m.index, end: m.index + m[0].length };
+    return rule.re.test(subjectDec) || (rule.cat !== 'clean' && rule.re.test(hard)) ? {} : null;
+  }
+  const i = subject.indexOf(rule.text);
+  if (i >= 0) return { start: i, end: i + rule.text.length };
+  return subjectDec.includes(rule.text) || (rule.cat !== 'clean' && hard.includes(rule.text)) ? {} : null;
+}
+function classify(r) {
+  r.pp = pathParts(r.url);
+  r.cat = 'gray'; r.rule = null; r.hl = null;
+  if (!r.url && !r.ua) return;
+  for (const cat of CATS) {
+    for (const rule of compiled) {
+      if (rule.cat !== cat) continue;
+      const m = matchRule(rule, r);
+      if (!m) continue;
+      r.cat = cat; r.rule = rule;
+      if (m.start !== undefined && r.pp.pathOrig.length === r.pp.path.length) r.hl = [m.start, m.end];
+      return;
+    }
+  }
+}
+const reclassifyAll = () => { for (const r of all) classify(r); };
+const countRule = (rule) => { let n = 0; for (const r of all) if (matchRule(rule, r)) n++; return n; };
+
+function urlHtml(r) {
+  const pp = r.pp || pathParts(r.url);
+  const po = pp.pathOrig;
+  let ph;
+  if (r.hl && r.hl[1] <= po.length) ph = esc(po.slice(0, r.hl[0])) + '<mark>' + esc(po.slice(r.hl[0], r.hl[1])) + '</mark>' + esc(po.slice(r.hl[1]));
+  else ph = esc(po);
+  return `<span class="host">${esc(pp.scheme + pp.host)}</span><span class="uri ${esc(r.cat)}">${ph}</span>`;
+}
+function urlTitle(r) {
+  const why = r.rule ? `규칙: ${r.rule.pattern}${r.rule.note ? ' — ' + r.rule.note : ''} [${r.rule.field === 'ua' ? 'User-Agent' : 'URL'}/${r.rule.type === 'regex' ? '정규식' : '문자열'}]` : '걸린 규칙 없음 (기본 분류)';
+  return `${L(r.cat)} · ${why}\n${r.url || r.notes}`;
+}
+
+// ---------- load ----------
+// 목록은 1000건씩 페이지로 받는다 (Workers 는 요청당 외부 호출 50개 제한)
+async function fetchAll(sc, label) {
+  const out = new Map(); // id 로 중복 제거
+  for (let p = 1; p <= 500; p++) {
+    await acquire(1, (s) => { el.loading.textContent = `${label} — Cloudflare API 한도 대기 ${Math.ceil(s.waitMs / 1000)}초`; });
+    el.loading.textContent = `${label} — ${out.size.toLocaleString()}건 받음, ${p}번째 묶음(1000건) 요청 중…`;
+    let j;
+    for (let attempt = 0; ; attempt++) {
+      try { j = await api('GET', `/api/ip/rules?scope=${sc}&page=${p}`); break; }
+      catch (e) { if (!e.rate || attempt >= 4) throw e; await acquire(1, (s) => { el.loading.textContent = `${label} — Cloudflare API 한도 대기 ${Math.ceil(s.waitMs / 1000)}초`; }); }
+    }
+    if (j.zoneName) zoneName = j.zoneName;
+    for (const r of j.rules) out.set(r.id, r);
+    if (!j.more) break;
+  }
+  return [...out.values()];
+}
+// 404 가드가 만든 자산존 Allow 예외 룰인지 (사람이 직접 만든 Allow 룰은 건드리지 않는다)
+const isGuardAllow = (z) => z.mode === 'whitelist' && (z.target === 'ip' || z.target === 'ip6') && /404 guard/i.test(z.notes || '');
+function setPairs(zoneRules) {
+  pairs = new Map();
+  for (const z of zoneRules) {
+    if (!isGuardAllow(z)) continue;
+    if (!pairs.has(z.value)) pairs.set(z.value, []);
+    pairs.get(z.value).push(z.id);
+  }
+  pairsOk = true;
+  for (const r of all) r.pair = loadedScope === 'account' && pairs.has(r.value);
+}
+function dropPair(value) { pairs.delete(value); for (const r of all) if (r.value === value) r.pair = false; }
+
+async function readConfig() {
+  const cfg = await api('GET', '/api/ip/config');
+  configured = !!cfg.configured; zoneEnabled = !!cfg.zoneEnabled; maxCalls = cfg.maxCalls || 40;
+  if (cfg.zoneName) zoneName = cfg.zoneName;
+  rate.budget = Number(cfg.rateBudget) || 900; rate.windowMs = (Number(cfg.rateWindowSec) || 300) * 1000;
+  el.scopeSel.hidden = !zoneEnabled;
+  el.scopeSel.options[1].textContent = zoneName + ' 룰';
+  cfgOk = true;
+}
+
+let loading = false;
+async function load() {
+  if (loading) return;
+  loading = true;
+  const sc = scope; // 불러오는 동안 전환돼도 이 값으로 끝까지
+  el.loading.hidden = false; el.wrap.hidden = true; el.banner.hidden = true;
+  $('btnRefresh').disabled = true; el.scopeSel.disabled = true;
+  try {
+    if (!cfgOk) await readConfig(); // 처음에 설정을 못 읽었으면 다시 시도
+    if (!configured) throw Object.assign(new Error('IP 룰용 토큰이 설정되지 않았습니다.'), { status: 0 });
+    const list = await fetchAll(sc, sc === 'zone' ? zoneName + ' 룰' : '계정 룰');
+    all = list; selected.clear(); loadedScope = sc;
+    for (const r of all) { classify(r); r.pair = false; }
+    pairs = new Map(); pairsOk = !(sc === 'account' && zoneEnabled);
+    let pairErr = '';
+    if (sc === 'account' && zoneEnabled) {
+      try { setPairs(await fetchAll('zone', zoneName + ' Allow 룰')); }
+      catch (e) { pairErr = e.status === 403 ? PERM_HELP + '\n(' + e.message + ')' : e.message; }
+    }
+    el.fetchedAt.textContent = '조회: ' + new Date().toLocaleString('ko-KR', { hour12: false });
+    applyFilter();
+    if (pairErr) {
+      el.banner.className = 'banner';
+      el.banner.textContent = `${zoneName} Allow 룰 목록 조회 실패 — 계정 룰 삭제·위험차단을 막았습니다 (지우면 ${zoneName} Allow 룰이 고아로 남음). 새로고침한 뒤 작업하세요.\n${pairErr}`;
+      el.banner.hidden = false;
+    }
+  } catch (e) {
+    showError('불러오기 실패: ', e);
+    all = []; pairs = new Map(); pairsOk = false; applyFilter();
+  } finally {
+    el.loading.hidden = true; el.wrap.hidden = false; loading = false;
+    $('btnRefresh').disabled = false; el.scopeSel.disabled = false;
+  }
+  if (scope !== sc) load(); // 불러오는 중에 범위를 바꿨으면 바뀐 범위로 다시
+}
+
+// ---------- filter / sort / render ----------
+function baseFilter() {
+  const terms = el.q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const f = el.field.value, mf = el.modeFilter.value;
+  return all.filter((r) => {
+    if (mf && r.mode !== mf) return false;
+    if (!terms.length) return true;
+    const hay = (f === 'all' ? r.value + ' ' + r.notes : String(r[f] || '')).toLowerCase();
+    return terms.every((t) => hay.includes(t));
+  });
+}
+// 추가시간(notes 의 서버 로컬시간) 기준 날짜. 없으면 created_on(UTC) 을 브라우저 로컬 날짜로
+function localDate(r) {
+  if (r.time && /^\d{4}-\d{2}-\d{2}/.test(r.time)) return r.time.slice(0, 10);
+  const d = new Date(r.created_on);
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function applyFilter(opts = {}) {
+  const base0 = baseFilter();
+  const today = todayStr();
+  const isToday = (r) => localDate(r) === today;
+  // 경로 버튼 건수: 다른 필터(날짜·분류)까지 적용한 상태에서 경로 조건에 맞는 것
+  for (const b of el.cats.querySelectorAll('button.pth')) {
+    const fn = PATH_FILTERS[b.dataset.path];
+    const n = fn ? base0.filter((r) => fn(r) && (!dateFilter || (dateFilter === 'today') === isToday(r)) && (!catFilter || r.cat === catFilter)).length : 0;
+    b.querySelector('b').textContent = n.toLocaleString();
+    b.classList.toggle('active', b.dataset.path === pathFilter);
+  }
+  const base = PATH_FILTERS[pathFilter] ? base0.filter(PATH_FILTERS[pathFilter]) : base0;
+  // 날짜 버튼 건수는 현재 분류 버튼까지 적용한 상태에서 센다 (버튼 숫자 = 눌렀을 때 보이는 건수)
+  const catBase = catFilter ? base.filter((r) => r.cat === catFilter) : base;
+  const dcounts = { '': catBase.length, today: 0, before: 0 };
+  for (const r of catBase) { if (isToday(r)) dcounts.today++; else dcounts.before++; }
+  for (const b of el.cats.querySelectorAll('button.date')) {
+    b.querySelector('b').textContent = (dcounts[b.dataset.date] || 0).toLocaleString();
+    b.classList.toggle('active', b.dataset.date === dateFilter);
+  }
+  const dated = dateFilter === 'today' ? base.filter(isToday) : dateFilter === 'before' ? base.filter((r) => !isToday(r)) : base;
+  const counts = { '': dated.length, attack: 0, gray: 0, clean: 0 };
+  for (const r of dated) counts[r.cat] = (counts[r.cat] || 0) + 1;
+  for (const b of el.cats.querySelectorAll('button.cat')) {
+    b.querySelector('b').textContent = (counts[b.dataset.cat] || 0).toLocaleString();
+    b.classList.toggle('active', b.dataset.cat === catFilter);
+  }
+  shown = catFilter ? dated.filter((r) => r.cat === catFilter) : dated;
+  sortShown();
+  if (!opts.keepPage) page = 1;
+  render();
+}
+function sortShown() {
+  const k = sortKey, d = sortDir;
+  shown.sort((a, b) => {
+    let x, y;
+    if (k === 'value') { x = ipKey(a.value); y = ipKey(b.value); if (x === y) { x = a.value; y = b.value; } }
+    else if (k === 'time') { x = a.time || a.created_on; y = b.time || b.created_on; }
+    else if (k === 'url') { x = (a.pp && a.pp.path) || ''; y = (b.pp && b.pp.path) || ''; }
+    else { x = a[k] || ''; y = b[k] || ''; }
+    return x < y ? -d : x > y ? d : 0;
+  });
+}
+function render() {
+  const size = +el.pageSize.value || shown.length || 1;
+  pages = Math.max(1, Math.ceil(shown.length / size));
+  page = Math.min(Math.max(1, page), pages);
+  const slice = shown.slice((page - 1) * size, page * size);
+  const tagName = esc(zoneName.split('.')[0]);
+
+  const opts = Object.entries(MODE_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  el.tbody.innerHTML = slice.map((r) => `
+    <tr data-id="${esc(r.id)}" class="${selected.has(r.id) ? 'selected' : ''}">
+      <td><input type="checkbox" class="sel" ${selected.has(r.id) ? 'checked' : ''}></td>
+      <td class="ip" title="${esc(r.value)}"><span class="ipwrap"><span class="ipval">${esc(r.value)}</span>${r.target && r.target !== 'ip' ? `<span class="tag">${esc(r.target)}</span>` : ''}${r.pair ? `<span class="tag pair" title="${esc(zoneName)} Allow 룰 있음 (삭제 시 함께 삭제)">${tagName}</span>` : ''}</span></td>
+      <td class="time" title="created: ${esc(r.created_on)}">${esc(r.time || (r.created_on || '').replace('T', ' ').slice(0, 19))}</td>
+      <td class="url" title="${esc(urlTitle(r))}"><span class="dot ${esc(r.cat)}"></span>${r.url ? urlHtml(r) : '<span style="color:var(--dim)">' + esc(r.notes || '-') + '</span>'}${r.url ? '<button class="flag" title="이 URL 경로로 규칙 추가">⚑</button>' : ''}</td>
+      <td class="ua" title="${esc(r.ua)}">${esc(r.ua)}</td>
+      <td class="act"><select class="mode ${esc(r.mode)}" title="Action 변경 (즉시 적용)">${opts}</select></td>
+      <td><button class="icon danger del" title="삭제">✕</button></td>
+    </tr>`).join('');
+  [...el.tbody.children].forEach((tr, i) => { tr.querySelector('select.mode').value = slice[i].mode; });
+
+  el.empty.hidden = shown.length > 0;
+  el.pager.hidden = pages <= 1;
+  el.pageInfo.textContent = `${page} / ${pages} 페이지`;
+  el.prev.disabled = el.first.disabled = page <= 1;
+  el.next.disabled = el.last.disabled = page >= pages;
+  el.cntTotal.textContent = all.length.toLocaleString();
+  el.cntShown.textContent = shown.length.toLocaleString();
+  document.querySelectorAll('th.sortable').forEach((th) => {
+    const label = th.dataset.label || (th.dataset.label = th.textContent.trim());
+    th.innerHTML = esc(label) + (th.dataset.key === sortKey ? `<span class="arrow">${sortDir > 0 ? '▲' : '▼'}</span>` : '');
+  });
+  updateBlockBtn();
+  updateSelection();
+}
+function updateSelection() {
+  // 표시 목록에서 사라진 항목은 선택 해제
+  const shownIds = new Set(shown.map((r) => r.id));
+  for (const id of selected) if (!shownIds.has(id)) selected.delete(id);
+  el.cntSel.textContent = selected.size.toLocaleString();
+  el.bulkCnt.textContent = selected.size.toLocaleString();
+  el.bulkBar.hidden = selected.size === 0;
+  setHdr();
+  el.chkAll.checked = shown.length > 0 && selected.size === shown.length;
+  el.chkAll.indeterminate = selected.size > 0 && selected.size < shown.length;
+  for (const tr of el.tbody.children) {
+    const on = selected.has(tr.dataset.id);
+    tr.classList.toggle('selected', on);
+    tr.querySelector('.sel').checked = on;
+  }
+}
+
+// ---------- 서버로 보낼 항목 ----------
+const byId = (id) => all.find((r) => r.id === id);
+const matesOf = (r) => (loadedScope === 'account' && zoneEnabled ? (pairs.get(r.value) || []).slice(0, 10) : []);
+function itemFor(op, r) {
+  const it = { id: r.id, value: r.value };
+  if (op === 'mode' || op === 'block') { it.configuration = r.configuration; it.notes = r.notes; it.mode = r.mode; }
+  const needPairs = (op === 'delete' && loadedScope === 'account') || op === 'unpair' || op === 'block';
+  if (needPairs && pairsOk) it.mates = matesOf(r);
+  return it;
+}
+// 자산존 Allow 목록을 모르는데 계정 룰을 지우려는 경우 — 막는다
+function pairsBlocked(op) {
+  const needPairs = (op === 'delete' && loadedScope === 'account') || op === 'unpair' || op === 'block';
+  if (!needPairs || !zoneEnabled || pairsOk) return false;
+  toast(`${zoneName} Allow 룰 목록을 확인하지 못해 막았습니다. 새로고침한 뒤 다시 하세요.`, 'err', 6000);
+  return true;
+}
+const callsOf = (op, it) => callsFor(op, Object.assign({ mates: [] }, it));
+// Cloudflare 호출 수 (서버의 checkItems 와 같은 계산)
+function callsFor(op, it) {
+  if (op === 'mode') return 1;
+  const m = it.mates ? it.mates.length : 0;
+  if (op === 'delete') return 1 + m;
+  if (op === 'unpair') return m;
+  return m + (it.mode !== 'block' ? 1 : 0); // block
+}
+const OP_PATH = { mode: '/api/ip/mode', delete: '/api/ip/delete', unpair: '/api/ip/block', block: '/api/ip/block' };
+function opBody(op, items, mode) {
+  const b = { scope: loadedScope, items };
+  if (op === 'mode') b.mode = mode;
+  if (op === 'block') b.setBlock = true;
+  return b;
+}
+
+// ---------- single actions ----------
+const pairNote = () => (loadedScope === 'account' && zoneEnabled && pairsOk ? `\n(${zoneName} Allow 룰도 함께 삭제됩니다)` : '');
+function pairSummary(paired, errors) {
+  let s = paired ? ` (+${zoneName} Allow ${paired}건)` : '';
+  if (errors && errors.length) s += `\n${zoneName} Allow 삭제 실패 ${errors.length}건: ${errors.slice(0, 2).join('; ')}`;
+  return s;
+}
+function removeLocal(ids) {
+  const s = new Set(ids);
+  all = all.filter((r) => !s.has(r.id));
+  for (const id of ids) selected.delete(id);
+}
+async function single(op, r, mode) {
+  const it = itemFor(op, r);
+  if (op !== 'mode' && pairsBlocked(op)) throw new Error(`${zoneName} Allow 룰 목록을 확인하지 못해 막았습니다. 새로고침한 뒤 다시 하세요.`);
+  await acquire(callsFor(op, it), (s) => toast(`Cloudflare API 한도 대기 ${Math.ceil(s.waitMs / 1000)}초`, '', 1500));
+  const j = await api('POST', OP_PATH[op], opBody(op, [it], mode));
+  const x = j.results[0];
+  if (x.skipped) throw new Error(`Cloudflare API 한도에 걸렸습니다. ${j.retryAfter || 30}초 뒤 다시 하세요.`);
+  if (!x.ok) throw new Error(x.error);
+  if (j.logError) toast(j.logError + ' (Cloudflare 에는 적용됨)', 'err', 6000);
+  return x.result;
+}
+async function changeMode(id, mode, selectEl) {
+  const r = byId(id); if (!r) return;
+  const prev = r.mode;
+  selectEl.disabled = true;
+  try {
+    const res = await single('mode', r, mode);
+    Object.assign(r, res); classify(r); r.pair = loadedScope === 'account' && pairs.has(r.value);
+    selectEl.className = 'mode ' + mode;
+    applyFilter({ keepPage: true }); // Action 필터가 걸려 있으면 바뀐 행이 목록/건수에서 빠지도록
+    toast(`${r.value} → ${MODE_LABEL[mode]}`, 'ok');
+  } catch (e) {
+    selectEl.value = prev; toast('변경 실패: ' + e.message, 'err', 6000);
+  } finally { selectEl.disabled = false; }
+}
+async function deleteOne(id) {
+  const r = byId(id); if (!r) return;
+  if (pairsBlocked('delete')) return;
+  if (!confirm(`${r.value} 규칙을 삭제할까요?\n${r.notes}${pairNote()}`)) return;
+  try {
+    const res = await single('delete', r);
+    removeLocal([id]);
+    if ((res.paired || []).length) dropPair(r.value);
+    applyFilter({ keepPage: true });
+    const errs = res.pairedErrors || [];
+    toast(`${r.value} 삭제됨${pairSummary((res.paired || []).length, errs)}${res.note ? '\n' + res.note : ''}`, errs.length ? 'err' : 'ok', errs.length ? 8000 : 3500);
+  } catch (e) { toast('삭제 실패: ' + e.message, 'err', 6000); }
+}
+
+// ---------- 위험차단: 현재 목록의 위험 IP 에 남아 있는 자산존 Allow 룰("404 guard: asset zone exemption")만 삭제 ----------
+// 계정 룰(Interactive Challenge)은 그대로 둔다 → 그 IP 는 자산존에서도 챌린지를 받게 된다.
+// 대상은 자산존 태그가 있는 위험만 (이미 없는 것은 제외 → 버튼 숫자가 0 이면 할 일 없음)
+const needsBlock = (r) => r.cat === 'attack' && r.pair;
+function updateBlockBtn() {
+  const b = $('btnBlockAll');
+  b.hidden = loadedScope !== 'account' || !zoneEnabled;
+  const n = b.hidden ? 0 : shown.filter(needsBlock).length;
+  b.querySelector('b').textContent = n.toLocaleString();
+  b.disabled = n === 0;
+  b.title = `현재 목록의 ${L('attack')} 중 ${zoneName} Allow 룰이 남아 있는 ${n.toLocaleString()}건: 그 Allow 룰만 삭제 (계정 룰은 그대로)`;
+}
+function etaLine(totalCalls) {
+  const s = rateStatus();
+  const avail = Math.max(0, s.budget - s.used);
+  const waits = Math.ceil(Math.max(0, totalCalls - avail) / s.budget);
+  return waits > 0 ? `\n\nCloudflare API 한도(5분당 ${s.budget.toLocaleString()}회) 때문에 약 ${waits * 5}분 넘게 걸립니다. 중간에 중지할 수 있습니다.` : '';
+}
+async function blockAll() {
+  const targets = shown.filter(needsBlock);
+  if (!targets.length || pairsBlocked('unpair')) return;
+  const calls = targets.reduce((n, r) => n + callsOf('unpair', itemFor('unpair', r)), 0);
+  const msg = `현재 목록의 ${L('attack')} ${targets.length.toLocaleString()}건의 ${zoneName} Allow 룰(404 guard: asset zone exemption)을 삭제할까요?\n\n`
+    + `계정 룰(Interactive Challenge)은 그대로 두고, 이 IP 들은 ${zoneName} 에서도 챌린지를 받게 됩니다.` + etaLine(calls);
+  if (!confirm(msg)) return;
+  await bulk('unpair', null, { ids: targets.map((r) => r.id), confirmed: true });
+}
+
+// ---------- bulk (호출 40회 이하로 묶어 보내며 진행률 표시, 중간 중지 가능) ----------
+let bulkStop = false, rateTimer = null;
+function showRate() {
+  const s = rateStatus();
+  const wait = s.waitMs > 0 ? ` · 한도 도달, ${Math.ceil(s.waitMs / 1000)}초 뒤 계속` : '';
+  $('progRate').textContent = `Cloudflare API 요청 ${s.used.toLocaleString()} / ${s.budget.toLocaleString()}회 (최근 5분)${wait}`;
+}
+function showProgress(title, total) {
+  $('progTitle').textContent = title;
+  $('progFill').style.width = '0%';
+  $('progText').textContent = `0 / ${total.toLocaleString()}`;
+  $('progSub').textContent = ''; $('progRate').textContent = '';
+  $('progStop').disabled = false; $('progStop').textContent = '중지';
+  bulkStop = false; working = true;
+  $('progress').hidden = false;
+  clearInterval(rateTimer); showRate(); rateTimer = setInterval(showRate, 1000);
+}
+function hideProgress() { clearInterval(rateTimer); rateTimer = null; $('progress').hidden = true; working = false; }
+function updateProgress(done, total, sub) {
+  $('progFill').style.width = Math.round((done / total) * 100) + '%';
+  $('progText').textContent = `${done.toLocaleString()} / ${total.toLocaleString()}`;
+  $('progSub').textContent = sub || '';
+}
+$('progStop').addEventListener('click', () => { bulkStop = true; $('progStop').disabled = true; $('progStop').textContent = '이번 묶음까지 처리하고 중지…'; });
+
+// op: delete | mode | unpair(자산존 Allow 만 삭제) | block(unpair + Action Block). opts.ids 가 없으면 체크한 항목이 대상,
+// opts.confirmed 면 확인창 생략(호출한 쪽에서 이미 물어봄)
+async function bulk(op, mode, opts = {}) {
+  const ids = opts.ids || [...selected];
+  if (!ids.length || pairsBlocked(op)) return;
+  const n = ids.length.toLocaleString();
+  const rows = ids.map(byId).filter(Boolean);
+  const queue = rows.map((r) => itemFor(op, r));
+  if (!opts.confirmed) {
+    const label = op === 'delete' ? '삭제' : `Action 을 ${MODE_LABEL[mode]} 로 변경`;
+    const calls = queue.reduce((s, it) => s + callsOf(op, it), 0);
+    if (!confirm(`선택한 ${n}건을 ${label}할까요?${op === 'delete' ? pairNote() : ''}${etaLine(calls)}`)) return;
+  }
+  const title = { delete: `${n}건 삭제 중…`, mode: `${n}건 Action 변경 중…`, unpair: `${n}건 ${zoneName} Allow 룰 삭제 중…`, block: `${n}건 차단 중…` }[op];
+  showProgress(title, queue.length);
+  const okIds = [], goneIds = [], fails = [], pairErrs = [];
+  let paired = 0, changed = 0, done = 0, stopped = false, rateRetries = 0, logError = '';
+  const subLine = () => {
+    const sub = [];
+    if (op === 'block') sub.push(`Block 변경 ${changed.toLocaleString()}건`);
+    if (op !== 'mode' && zoneEnabled && loadedScope === 'account') sub.push(`${zoneName} Allow ${paired.toLocaleString()}건 ${op === 'delete' ? '함께 ' : ''}삭제`);
+    if (fails.length) sub.push(`실패 ${fails.length}건`);
+    return sub.join(' · ');
+  };
+  try {
+    while (queue.length) {
+      if (bulkStop) { stopped = true; break; }
+      // 호출 수 상한(40회) 안에서 묶는다
+      const chunk = [];
+      let calls = 0;
+      while (queue.length) {
+        const c = Math.max(1, callsOf(op, queue[0]));
+        if (chunk.length && calls + c > maxCalls) break;
+        chunk.push(queue.shift()); calls += c;
+      }
+      await acquire(calls, () => showRate());
+      let j;
+      try {
+        j = await api('POST', OP_PATH[op], opBody(op, chunk, mode));
+      } catch (e) {
+        if (e.rate && rateRetries < 5) { rateRetries++; queue.unshift(...chunk); continue; } // 한도 — 기다렸다 그 묶음부터 다시
+        throw e;
+      }
+      if (j.logError) logError = j.logError;
+      const retry = [];
+      for (let i = 0; i < j.results.length; i++) {
+        const x = j.results[i];
+        if (x.skipped) { retry.push(chunk[i]); continue; } // 429 로 처리 못 한 것 — 다시 보낸다
+        done++;
+        if (!x.ok) {
+          fails.push(x);
+          // 계정 룰은 실패했어도 자산존 Allow 는 이미 지워졌을 수 있다 — 태그를 내린다
+          if (x.result && (x.result.paired || []).length) { paired += x.result.paired.length; const fr = byId(x.id); if (fr) dropPair(fr.value); }
+          continue;
+        }
+        okIds.push(x.id);
+        const res = x.result || {};
+        const r = byId(x.id);
+        if (op === 'delete') {
+          paired += (res.paired || []).length; pairErrs.push(...(res.pairedErrors || []));
+          if ((res.paired || []).length && r) dropPair(r.value);
+          continue;
+        }
+        if (op === 'mode') { if (r) { Object.assign(r, res); classify(r); r.pair = loadedScope === 'account' && pairs.has(r.value); } continue; }
+        // unpair/block: 자산존 Allow 가 지워졌으면 태그 제거, Action 이 바뀐 룰은 갱신, 그 사이 CF 에서 지워진 룰은 목록에서 제거
+        paired += (res.paired || []).length; pairErrs.push(...(res.pairedErrors || []));
+        if (res.modeChanged) changed++;
+        if (res.gone) { goneIds.push(x.id); continue; }
+        if (r) { if (res.rule) { Object.assign(r, res.rule); classify(r); } dropPair(r.value); }
+      }
+      // 429 로 못 한 것은 다시 보낸다. 조금이라도 처리됐으면 계속하고, 아무것도 못 한 채 5번 연속이면 포기
+      const progressed = retry.length < chunk.length;
+      rateRetries = progressed ? 0 : rateRetries + 1;
+      if (retry.length) {
+        if (rateRetries >= 5) { for (const it of retry) { done++; fails.push({ id: it.id, error: 'Cloudflare API 한도 — 다시 시도하세요' }); } }
+        else queue.unshift(...retry);
+      }
+      updateProgress(done, rows.length, subLine());
+    }
+  } catch (e) {
+    fails.push({ id: '', error: e.status === 403 ? PERM_HELP : e.message });
+  } finally {
+    hideProgress();
+  }
+  if (op === 'delete') removeLocal(okIds);
+  if (goneIds.length) removeLocal(goneIds);
+  if (!opts.ids) for (const id of okIds) selected.delete(id); // 실패했거나 중지로 남은 것은 선택 유지 → 바로 다시 시도 가능 (위험차단은 체크 상태를 건드리지 않음)
+  applyFilter({ keepPage: true });
+  let head;
+  if (op === 'unpair') {
+    head = `${okIds.length.toLocaleString()}건 처리${stopped ? ' 후 중지됨' : ' 완료'} (${zoneName} Allow 룰 ${paired.toLocaleString()}건 삭제)`;
+  } else if (op === 'block') {
+    const parts = [`Block 변경 ${changed.toLocaleString()}건`];
+    if (zoneEnabled) parts.push(`${zoneName} Allow 삭제 ${paired.toLocaleString()}건`);
+    if (goneIds.length) parts.push(`이미 Cloudflare 에서 지워진 것 ${goneIds.length}건`);
+    head = `${okIds.length.toLocaleString()}건 차단${stopped ? ' 후 중지됨' : ' 완료'} (${parts.join(', ')})`;
+  } else {
+    const extra = op === 'delete' ? pairSummary(paired, pairErrs) : '';
+    head = `${okIds.length.toLocaleString()}건 ${op === 'delete' ? '삭제' : '변경'}${stopped ? ' 후 중지됨' : ' 완료'}${extra}`;
+  }
+  if (logError) head += '\n' + logError + ' (Cloudflare 에는 적용됨)';
+  const keep = opts.ids ? '버튼을 다시 누르면 재시도' : '선택 유지됨';
+  if (fails.length) toast(`${head}\n실패 ${fails.length}건 (${keep}): ${fails.slice(0, 3).map((f) => f.error).join('\n')}`, 'err', 10000);
+  else if (pairErrs.length) toast(head, 'err', 8000);
+  else toast(head, 'ok');
+}
+
+// ---------- 규칙 관리 ----------
+async function loadFilters() {
+  try { compileFilters(await api('GET', '/api/ip/filters')); }
+  catch (e) { toast('분류 규칙을 불러오지 못했습니다: ' + e.message, 'err', 10000); }
+}
+// opts.inlineRow: 표 안의 입력칸을 고친 경우 — 표 전체를 다시 그리면 포커스가 날아가므로 그 행의 건수만 갱신
+async function saveFilters(next, msg, opts = {}) {
+  try {
+    const saved = await api('PUT', '/api/ip/filters', next);
+    compileFilters(saved); reclassifyAll(); applyFilter({ keepPage: true });
+    if (opts.inlineRow) updateRuleRow(opts.inlineRow); else renderRules();
+    toast(msg || '규칙 저장됨', 'ok');
+    return true;
+  } catch (e) {
+    toast('저장 실패: ' + e.message, 'err', 8000);
+    if (opts.inlineRow) { for (const i of opts.inlineRow.querySelectorAll('input')) i.style.borderColor = 'var(--red)'; }
+    else { await loadFilters(); renderRules(); }
+    return false;
+  }
+}
+function updateTabCounts() {
+  for (const b of el.ruleTabs.querySelectorAll('button[data-tab]')) {
+    b.classList.toggle('active', b.dataset.tab === ruleTab);
+    b.querySelector('b').textContent = FCFG.rules.filter((r) => r.cat === b.dataset.tab).length;
+  }
+}
+function updateRuleRow(tr) {
+  const rule = compiled.find((r) => r.id === tr.dataset.rid); if (!rule) return;
+  const n = countRule(rule);
+  const cnt = tr.querySelector('td.cnt');
+  cnt.textContent = n.toLocaleString() + '건'; cnt.classList.toggle('zero', !n);
+  const bad = rule.type === 'regex' && !rule.re;
+  for (const i of tr.querySelectorAll('input')) i.style.borderColor = bad ? 'var(--red)' : '';
+  updateTabCounts();
+}
+function openRules(prefill) {
+  el.modal.hidden = false;
+  if (prefill) {
+    el.raCat.value = prefill.cat || 'attack';
+    el.raField.value = prefill.field || 'url';
+    el.raType.value = prefill.type || 'text';
+    el.raPattern.value = prefill.pattern || '';
+    el.raNote.value = prefill.note || '';
+    ruleTab = el.raCat.value;
+  }
+  renderRules(); updateAddCount();
+  el.raPattern.focus();
+}
+function renderRules() {
+  updateTabCounts();
+  const list = compiled.filter((r) => r.cat === ruleTab);
+  el.ruleEmpty.hidden = list.length > 0;
+  const mv = (cur) => CATS.map((c) => `<option value="${c}" ${c === cur ? 'selected' : ''}>${esc(L(c))}</option>`).join('');
+  el.ruleBody.innerHTML = list.map((r) => {
+    const n = countRule(r);
+    const bad = r.type === 'regex' && !r.re;
+    return `<tr data-rid="${esc(r.id)}">
+      <td><span class="pill">${r.field === 'ua' ? 'User-Agent' : 'URL'}</span></td>
+      <td><span class="pill">${r.type === 'regex' ? '정규식' : '문자열'}</span></td>
+      <td><input type="text" class="pat" data-k="pattern" value="${esc(r.pattern)}" ${bad ? 'style="border-color:var(--red)" title="정규식 오류"' : ''}></td>
+      <td><input type="text" class="note" data-k="note" value="${esc(r.note)}" placeholder="설명"></td>
+      <td class="cnt ${n ? '' : 'zero'}" title="현재 목록에서 이 규칙에 걸리는 건수 (판정 순서와 무관)">${n.toLocaleString()}건</td>
+      <td><select class="mv">${mv(r.cat)}</select></td>
+      <td><button class="icon danger rdel" title="규칙 삭제">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+function draftRule() {
+  const pattern = el.raPattern.value.trim();
+  if (!pattern) return null;
+  const type = el.raType.value;
+  let re = null;
+  if (type === 'regex') { try { re = new RegExp(pattern, 'i'); } catch { return { error: '정규식 오류' }; } }
+  return { cat: el.raCat.value, field: el.raField.value, type, pattern, note: el.raNote.value.trim(), re, text: pattern.toLowerCase() };
+}
+function updateAddCount() {
+  const d = draftRule();
+  if (!d) { el.raCount.textContent = ''; return; }
+  if (d.error) { el.raCount.textContent = d.error; return; }
+  // 판정 순서(위험→애매→안전) 때문에, 지금 더 앞 분류에 있는 행은 이 규칙으로 바뀌지 않는다
+  const di = CATS.indexOf(d.cat);
+  let n = 0, changes = 0, blocked = 0;
+  for (const r of all) {
+    if (!matchRule(d, r)) continue;
+    n++;
+    const ci = CATS.indexOf(r.cat);
+    if (ci > di) changes++; else if (ci < di) blocked++;
+  }
+  el.raCount.textContent = `현재 목록 ${n.toLocaleString()}건 일치 · 분류가 바뀌는 것 ${changes.toLocaleString()}건` + (blocked ? ` (앞 분류라 안 바뀜 ${blocked.toLocaleString()}건)` : '');
+}
+
+// ---------- events ----------
+let deb;
+el.q.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(applyFilter, 150); });
+el.q.addEventListener('keydown', (e) => { if (e.key === 'Escape') { el.q.value = ''; applyFilter(); } });
+el.field.addEventListener('change', applyFilter);
+el.modeFilter.addEventListener('change', applyFilter);
+el.pageSize.addEventListener('change', () => { page = 1; render(); });
+el.prev.addEventListener('click', () => { page--; render(); window.scrollTo(0, 0); });
+el.next.addEventListener('click', () => { page++; render(); window.scrollTo(0, 0); });
+el.first.addEventListener('click', () => { page = 1; render(); window.scrollTo(0, 0); });
+el.last.addEventListener('click', () => { page = pages; render(); window.scrollTo(0, 0); });
+$('btnRefresh').addEventListener('click', () => load());
+el.chkAll.addEventListener('change', () => { selected = el.chkAll.checked ? new Set(shown.map((r) => r.id)) : new Set(); updateSelection(); });
+$('btnClearSel').addEventListener('click', () => { selected.clear(); updateSelection(); });
+$('btnBulkDelete').addEventListener('click', () => bulk('delete'));
+$('btnBulkMode').addEventListener('click', () => bulk('mode', el.bulkMode.value));
+$('btnBlockAll').addEventListener('click', blockAll);
+el.cats.addEventListener('click', (e) => {
+  const c = e.target.closest('button.cat');
+  const d = e.target.closest('button.date');
+  const p = e.target.closest('button.pth');
+  if (c) catFilter = c.dataset.cat === catFilter ? '' : c.dataset.cat;
+  else if (d) dateFilter = d.dataset.date === dateFilter ? '' : d.dataset.date;
+  else if (p) pathFilter = p.dataset.path === pathFilter ? '' : p.dataset.path;
+  else return;
+  applyFilter();
+});
+document.querySelectorAll('th.sortable').forEach((th) => th.addEventListener('click', () => {
+  const k = th.dataset.key;
+  if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = k === 'time' ? -1 : 1; }
+  sortShown(); render();
+}));
+el.tbody.addEventListener('change', (e) => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  const id = tr.dataset.id;
+  if (e.target.classList.contains('sel')) { e.target.checked ? selected.add(id) : selected.delete(id); updateSelection(); }
+  else if (e.target.classList.contains('mode')) changeMode(id, e.target.value, e.target);
+});
+el.tbody.addEventListener('click', (e) => {
+  const del = e.target.closest('button.del');
+  if (del) return deleteOne(del.closest('tr').dataset.id);
+  const flag = e.target.closest('button.flag');
+  if (flag) {
+    const r = byId(flag.closest('tr').dataset.id); if (!r) return;
+    const po = (r.pp && r.pp.pathOrig) || '';
+    openRules({ cat: 'attack', field: 'url', type: 'text', pattern: po.split('?')[0].split('#')[0], note: '' });
+  }
+});
+el.scopeSel.addEventListener('change', () => { scope = el.scopeSel.value; catFilter = ''; dateFilter = ''; pathFilter = ''; load(); });
+
+// 규칙 창
+$('btnRules').addEventListener('click', () => openRules(null));
+$('btnRulesClose').addEventListener('click', () => { el.modal.hidden = true; });
+el.modal.addEventListener('click', (e) => { if (e.target === el.modal) el.modal.hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !el.modal.hidden) el.modal.hidden = true; });
+el.ruleTabs.addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (!b) return; ruleTab = b.dataset.tab; renderRules(); });
+for (const x of [el.raPattern, el.raNote]) x.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(updateAddCount, 150); });
+for (const x of [el.raCat, el.raField, el.raType]) x.addEventListener('change', updateAddCount);
+el.raPattern.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnRuleAdd').click(); });
+$('btnRuleAdd').addEventListener('click', async () => {
+  const d = draftRule();
+  if (!d) return toast('패턴을 입력하세요.', 'err');
+  if (d.error) return toast(d.error, 'err');
+  const next = { labels: FCFG.labels, rules: [...FCFG.rules, { cat: d.cat, field: d.field, type: d.type, pattern: d.pattern, note: d.note }] };
+  ruleTab = d.cat;
+  if (await saveFilters(next, `${L(d.cat)} 규칙 추가됨: ${d.pattern}`)) { el.raPattern.value = ''; el.raNote.value = ''; updateAddCount(); }
+});
+el.ruleBody.addEventListener('change', async (e) => {
+  const tr = e.target.closest('tr[data-rid]'); if (!tr) return;
+  const rid = tr.dataset.rid;
+  const rules = FCFG.rules.map((r) => ({ ...r }));
+  const rule = rules.find((r) => r.id === rid); if (!rule) return;
+  if (e.target.classList.contains('mv')) { rule.cat = e.target.value; ruleTab = rule.cat; await saveFilters({ labels: FCFG.labels, rules }, `규칙을 ${L(rule.cat)} 으로 이동`); }
+  else if (e.target.dataset.k) { rule[e.target.dataset.k] = e.target.value.trim(); await saveFilters({ labels: FCFG.labels, rules }, undefined, { inlineRow: tr }); }
+});
+el.ruleBody.addEventListener('click', async (e) => {
+  const b = e.target.closest('button.rdel'); if (!b) return;
+  const rid = b.closest('tr').dataset.rid;
+  const rule = FCFG.rules.find((r) => r.id === rid); if (!rule) return;
+  if (!confirm(`규칙을 삭제할까요?\n${rule.pattern}`)) return;
+  await saveFilters({ labels: FCFG.labels, rules: FCFG.rules.filter((r) => r.id !== rid) }, '규칙 삭제됨');
+});
+$('btnLabels').addEventListener('click', async () => {
+  const labels = {};
+  for (const inp of document.querySelectorAll('.labels input[data-label]')) labels[inp.dataset.label] = inp.value.trim();
+  await saveFilters({ labels, rules: FCFG.rules }, '분류 이름 저장됨');
+});
+$('btnRulesReset').addEventListener('click', async () => {
+  if (!confirm('규칙을 기본값으로 되돌릴까요? 직접 추가/수정한 규칙은 사라집니다.')) return;
+  try { compileFilters(await api('POST', '/api/ip/filters/reset', {})); reclassifyAll(); applyFilter(); renderRules(); toast('기본값으로 복원됨', 'ok'); }
+  catch (e) { toast('복원 실패: ' + e.message, 'err', 8000); }
+});
+
+// 처리 중에 창을 닫거나 새로고침하려 하면 한 번 묻는다
+window.addEventListener('beforeunload', (e) => { if (working) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---------- init ----------
+// 고정 영역 높이가 바뀔 때(선택 바 표시/숨김, 창 크기 변경) 표 머리글의 고정 위치도 따라가게
+const topEl = $('top');
+const setHdr = () => document.documentElement.style.setProperty('--hdr', topEl.offsetHeight + 'px');
+setHdr(); window.addEventListener('resize', setHdr);
+if (window.ResizeObserver) new ResizeObserver(setHdr).observe(topEl);
+(async () => {
+  await loadFilters();
+  load(); // 설정 읽기도 load 안에서 (실패하면 새로고침 버튼이 다시 시도)
+})();
+</script>
+</body>
+</html>

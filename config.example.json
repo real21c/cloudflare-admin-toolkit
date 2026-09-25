@@ -1,0 +1,10 @@
+{
+  "token": "",
+  "ipToken": "",
+  "serverIp": "",
+  "defaultGroup": "",
+  "ipPairZoneName": "",
+  "concurrency": 6,
+  "cacheTtlMinutes": 10,
+  "ipRateBudget": 900
+}
