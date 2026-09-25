@@ -1,56 +1,58 @@
 # cloudflare-admin-toolkit
 
+English | [한국어](README.ko.md)
+
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-blue)
 
-**Cloudflare 도메인이 많을 때, 대시보드 메뉴를 하나씩 들어가지 않고 한 화면에서 여러 도메인을 한꺼번에 관리하는 도구입니다.**
-내 Cloudflare 계정의 Workers(무료 요금제)에 직접 올려서 쓰는 셀프호스팅 방식이고, 화면은 한국어입니다.
+**A self-hosted toolkit for Cloudflare admins who manage many zones — change dozens or hundreds of domains from one screen instead of clicking through the dashboard zone by zone.**
+It runs on your own Cloudflare Workers (free plan works). No external server, zero dependencies.
 
-> Self-hosted admin toolkit for managing many Cloudflare zones at once — bulk proxy/SSL changes, cache rules, IP Access Rules, change log and per-user TOTP login. Runs on your own Cloudflare Workers (free plan). UI is in Korean. [English summary ↓](#english)
+> **Note:** the UI and the in-app help are in Korean. Timestamps are shown in KST.
 
 ---
 
-## 왜 만들었나
+## Why
 
-도메인이 수십 ~ 수백 개가 되면, 서버를 옮기거나 장애가 났을 때 도메인마다 대시보드에 들어가 프록시 · SSL · 캐시 설정을 하나씩 바꿔야 합니다.
-이 도구는 그 일을 **그룹 단위로 한 번에**, 바뀌는 내용을 **미리 보고**, 누가 무엇을 바꿨는지 **기록을 남기며** 할 수 있게 합니다.
+Once you manage tens or hundreds of zones, a server migration or an incident means opening each zone in the dashboard and flipping proxy / SSL / cache settings one by one.
+This toolkit does that **per group, in one action**, with a **preview** of what will change and a **change log** of who changed what.
 
-## 기능
+## Features
 
-| 메뉴 | 하는 일 |
+| Menu | What it does |
 |---|---|
-| **DNS · SSL/TLS** | 대상 서버 IP 를 가리키는 A/AAAA 레코드를 Proxied ↔ DNS only 로 일괄 전환 + SSL/TLS 모드 동시 변경 (미리보기 → 적용 · 되돌리기). 정적파일 캐시 규칙 · Tiered Cache · Smart Tiered Cache 일괄 켜기/끄기. 도메인 그룹 관리 |
-| **IP Rules** | 계정 IP Access Rules 조회 · 검색 · 분류(위험 / 애매 / 안전 — 규칙 편집 가능) · 삭제 · Action 변경. 자산존 Allow 예외 룰을 짝으로 함께 관리(선택) |
-| **변경 이력** | 누가 · 언제 · 무엇을 바꿨는지 (도메인 · IP 룰 · OTP · 설정 모두). 프록시 · SSL 은 되돌리기 가능 |
-| **설정** | 대상 IP · 기본 그룹 · 캐시 시간 · 자산존 · 호출 상한 · OTP 앱 이름을 화면에서 변경 |
-| **도움말** | 새 Cloudflare 계정에 설치하는 방법 (단계별) |
+| **DNS · SSL/TLS** | Bulk-switch A/AAAA records pointing at your target server IP between Proxied ↔ DNS only, together with the SSL/TLS mode, per group (preview → apply · revert). Bulk enable/disable a static-asset cache rule, Tiered Cache and Smart Tiered Cache. Zone groups |
+| **IP Rules** | Browse · search · classify (risky / unclear / safe — editable rules) · delete · change action on account IP Access Rules, in bulk. Optionally manages paired Allow exception rules on an asset zone |
+| **Change log** | Who / when / what, across domains, IP rules, OTP and settings. Proxy · SSL changes can be reverted |
+| **Settings** | Change the target IP, default group, cache TTL, asset zone, API-call budget and OTP issuer from the UI |
+| **Help** | Step-by-step install guide (in Korean) |
 
-안전장치
-- 대상 IP 가 아닌 레코드(메일 · 다른 서버 등)는 `보호` — 화면에서 골라도 **서버가 막습니다**
-- 적용 직전에 Cloudflare 에서 현재 상태를 **다시 읽고** 판단합니다 (대시보드에서 누가 바꿨어도 안전)
-- Cloudflare API 한도(사용자당 5분 1,200회)와 Workers 무료 요금제 제한(요청당 외부 호출 50회)에 맞춰 잘게 나눠 부릅니다
+Safeguards
+- Records that do not point at the target IP (mail, other servers, …) are **protected** — the server refuses to change them even if selected in the UI
+- The current state is **re-read from Cloudflare right before applying** — safe even if someone changed things in the dashboard meanwhile
+- Calls are chunked to respect the Cloudflare API limit (1,200 requests / 5 min / user) and the Workers free-plan limit (50 subrequests / request)
 
-로그인
-- 비밀번호 + **사람별 구글 OTP**. 처음 등록한 사람이 관리자 — 다른 사람 추가 · 사용중지 · 삭제 (사용중지하면 그 사람 창도 즉시 끊김)
-- 세션 12시간, IP 당 10분에 10번 틀리면 잠시 막힘
+Login
+- Password + **per-user TOTP** (Google Authenticator or any RFC 6238 app). The first person to register becomes the owner — only the owner can add, disable or delete others (disabling kills that person's sessions immediately)
+- 12-hour sessions; 10 failures per IP within 10 minutes gets blocked for a while
 
-## 빠른 시작 — 명령 하나로 설치
+## Quick start — one command
 
-**준비물**: Cloudflare 계정(무료 요금제 가능), [Node.js](https://nodejs.org) 18 이상
+**Prerequisites**: a Cloudflare account (free plan is fine), [Node.js](https://nodejs.org) 18+
 
-### 1. API 토큰 만들기
+### 1. Create API tokens
 
-Cloudflare 대시보드 → 오른쪽 위 프로필 → **My Profile → API Tokens → Create Token → Custom token**
+Cloudflare dashboard → profile (top right) → **My Profile → API Tokens → Create Token → Custom token**
 
-| 토큰 | 권한 |
+| Token | Permissions |
 |---|---|
-| 도메인 → `CF_API_TOKEN` | `Zone · Zone · Read` / `Zone · DNS · Edit` / `Zone · Zone Settings · Edit` / `Zone · Cache Rules · Edit`<br>Zone Resources: `Include · All zones from an account` |
-| IP Rules → `CF_IP_TOKEN` (선택) | `Account · Account Firewall Access Rules · Edit` / `Zone · Firewall Services · Edit` / `Zone · Zone · Read` |
+| Domains → `CF_API_TOKEN` | `Zone · Zone · Read` / `Zone · DNS · Edit` / `Zone · Zone Settings · Edit` / `Zone · Cache Rules · Edit`<br>Zone Resources: `Include · All zones from an account` |
+| IP Rules → `CF_IP_TOKEN` (optional) | `Account · Account Firewall Access Rules · Edit` / `Zone · Firewall Services · Edit` / `Zone · Zone · Read` |
 
-Client IP Filtering 은 비워 두세요 (Workers 는 나가는 IP 가 바뀝니다).
+Leave Client IP Filtering empty (Workers egress IPs change).
 
-### 2. 받아서 설정 파일 만들기
+### 2. Clone and create the config file
 
 ```bash
 git clone https://github.com/real21c/cloudflare-admin-toolkit.git
@@ -58,119 +60,101 @@ cd cloudflare-admin-toolkit
 node setup.mjs --init
 ```
 
-생긴 `setup.env` 의 빈 칸을 채웁니다. 필수는 네 개입니다.
+Fill in the blanks in the generated `setup.env`. Four keys are required:
 
-| 이름 | 값 |
+| Key | Value |
 |---|---|
-| `WORKER_NAME` | Worker 이름 (영문 소문자 · 숫자 · -). 주소가 `<이름>.<서브도메인>.workers.dev` 가 됩니다 |
-| `CF_API_TOKEN` | 1단계에서 만든 도메인 토큰 |
-| `PASSWORD_PREFIX` | 로그인 비밀번호 앞부분 (아래 참고) |
-| `SERVER_IP` | 일괄 변경할 대상 서버 IP |
+| `WORKER_NAME` | Worker name (lowercase letters · digits · `-`). The URL becomes `<name>.<subdomain>.workers.dev` |
+| `CF_API_TOKEN` | The domain token from step 1 |
+| `PASSWORD_PREFIX` | The first part of the login password (see below) |
+| `SERVER_IP` | The target server IP for bulk changes |
 
-wrangler 에 Cloudflare 계정이 여러 개 연결돼 있으면 `ACCOUNT_ID` 도 적습니다. 나머지 칸은 비워 두면 기본값을 씁니다.
+If wrangler is connected to more than one Cloudflare account, also set `ACCOUNT_ID`. Everything else can stay blank (defaults apply).
 
-### 3. 설치
+### 3. Install
 
 ```bash
-node setup.mjs --dry-run     # 먼저 확인만 — 값 · 토큰 · 로그인 · 빌드 검사 (아무것도 만들지 않음)
-node setup.mjs               # 설치
+node setup.mjs --dry-run     # check only — validates values, tokens, login and build; creates nothing
+node setup.mjs               # install
 ```
 
-스크립트가 wrangler 로그인(브라우저) → KV 만들기 → 배포(시크릿 함께) 까지 하고, 주소와 첫 로그인 방법을 알려 줍니다.
+The script handles wrangler login (browser) → KV creation → deploy (secrets included), then prints the URL and how to log in for the first time.
 
-- 올린 토큰 · 비밀번호는 `setup.env` 에서 자동으로 지웁니다 (`setup.env` 는 git 에 올라가지 않습니다)
-- 계정에 이미 같은 이름의 Worker 가 있으면 덮어쓰지 않고 멈춥니다
-- 손으로 하나씩 설치하는 방법과 모든 변수 · 시크릿 설명은 화면의 **도움말** 메뉴(`public/help.html`)에 있습니다
+- Uploaded secrets are wiped from `setup.env` afterwards (`setup.env` is git-ignored)
+- If a Worker with the same name already exists in the account, the script stops instead of overwriting it
+- The manual step-by-step install and every variable / secret are documented in the in-app **Help** menu (`public/help.html`, Korean)
 
-### 4. 첫 로그인 · OTP 등록 (꼭)
+### 4. First login · register TOTP (do this right away)
 
-- 비밀번호 = `PASSWORD_PREFIX` + `!` + 오늘 날짜 두 자리(한국 시간). 예) 접두어 `abc`, 5일이면 `abc!05`
-- 로그인하자마자 위쪽 **2단계 인증**에서 구글 OTP 를 등록하세요. 등록 전에는 비밀번호만 알면 누구나 들어올 수 있고, 날짜 부분은 추측할 수 있으니 접두어는 길게 정하세요
+- Password = `PASSWORD_PREFIX` + `!` + today's day of month, two digits (**KST**). E.g. prefix `abc` on the 5th → `abc!05`
+- Log in and register TOTP under **2단계 인증** (two-factor auth) immediately. Until someone registers, anyone who knows the password can log in — and the date part is guessable, so pick a long prefix
 
-## 업데이트 · 삭제
+## Update · uninstall
 
 ```bash
 git pull
-node setup.mjs               # 같은 setup.env 로 다시 실행하면 업데이트 (비워 둔 시크릿은 그대로 유지)
+node setup.mjs               # re-run with the same setup.env to update (blank secrets are kept as-is)
 ```
 
-설정 값을 바꾸고 싶을 때도 `setup.env` 를 고치고 다시 실행하면 됩니다. 대상 IP 같은 값은 화면의 **설정** 메뉴에서도 바꿀 수 있습니다.
+To change settings later, edit `setup.env` and re-run — or use the in-app **Settings** menu.
 
-삭제하려면:
+To uninstall:
 
 ```bash
 npx wrangler delete --config wrangler.setup.jsonc
-npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.jsonc   # KV id 는 .setup-state.json 에 있음
+npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.jsonc   # the KV id is in .setup-state.json
 ```
 
-## 비용과 한도
+## Cost and limits
 
-모두 무료 요금제 안에서 동작합니다.
+Everything fits in the free plan.
 
-| 항목 | 무료 한도 | 이 도구 |
+| Item | Free limit | This toolkit |
 |---|---|---|
-| Workers 요청 | 하루 10만 | 화면 이동 · API 호출마다 1건 |
-| KV 쓰기 | 하루 1,000 | 변경 · 이력 · 상태 캐시 저장 |
-| Cloudflare API | 사용자당 5분 1,200회 (요금 없음) | 도메인 상태 조회 1회 ≈ 도메인 수 × 2. IP Rules 화면은 5분 900회 아래로 스스로 늦춤 |
+| Workers requests | 100k / day | 1 per page view / API call |
+| KV writes | 1,000 / day | changes, log entries, status cache |
+| Cloudflare API | 1,200 / 5 min / user (no fee) | one status refresh ≈ zone count × 2; the IP Rules screen throttles itself to 900 / 5 min |
 
-## 알아 둘 점
+## Good to know
 
-- 화면은 한국어, 시간 표시는 한국 시간(KST) 기준입니다
-- 관리 대상 도메인에 Worker **route 를 걸지 마세요**. 그 도메인을 DNS only 로 바꾸는 순간 도구도 끊깁니다. `workers.dev` 주소나 Custom Domain 을 쓰세요
-- **IP Rules** 는 룰 메모가 `추가시간 | URL | User-Agent` 형식이면 칸을 나눠 보여 주고, 아니면 메모 전체를 한 칸에 보여 줍니다. 자산존 짝 기능은 `IP_PAIR_ZONE_NAME` 을 정했을 때만 동작합니다 (메모에 `404 guard` 가 들어간 Allow 룰만 짝으로 봄)
-- **기본 분류 규칙은 ASP/IIS 서버 기준**입니다 (예: PHP 확장자 요청을 `위험`으로 분류). 다른 서버라면 IP Rules 의 `⚙ 규칙` 에서 맞게 고치세요
-- 캐시 규칙은 설명 `static-assets (cloudflare-admin-toolkit)` 으로 자기 규칙을 찾습니다. 규칙을 건 뒤에 `src/core.js` 의 `CACHE_RULE_DESC` 를 바꾸면 예전 규칙을 못 찾습니다
-- `DNS only` 로 바꾸면 그 레코드는 캐시 · WAF · Workers route 가 모두 빠지고 원서버 IP 가 드러납니다. `Flexible` 은 원서버가 HTTPS 로 리다이렉트하면 무한 리다이렉트가 납니다
+- **The UI is Korean-only** and timestamps use KST
+- Do **not** attach a Worker route to a zone you manage with this tool — the moment you switch that zone to DNS only, the tool cuts itself off. Use the `workers.dev` URL or a Custom Domain
+- **IP Rules** splits the rule notes into time / URL / user-agent columns when the notes follow the `time | URL | User-Agent` format; otherwise the whole note is shown in one column. The asset-zone pairing only activates when `IP_PAIR_ZONE_NAME` is set (only Allow rules whose notes contain `404 guard` are treated as pairs)
+- **The default IP classification rules assume an ASP/IIS origin** (e.g. requests for PHP extensions are classified as risky). On other stacks, adjust them under `⚙ 규칙` in the IP Rules screen
+- The cache rule finds itself by its description string `static-assets (cloudflare-admin-toolkit)` (`CACHE_RULE_DESC` in `src/core.js`). If you change it after rules were deployed, old rules will no longer be found
+- Switching a record to `DNS only` bypasses cache, WAF and Workers routes and exposes the origin IP. `Flexible` causes a redirect loop if the origin forces HTTPS
 
-## 로컬 실행 (선택)
+## Local run (optional)
 
-Workers 가 안 될 때를 대비해 PC 에서 같은 화면을 띄울 수 있습니다. `127.0.0.1` 에서만 열리고 로그인은 없습니다.
+As a fallback when Workers is unavailable, the same UI can run on your PC. Binds to `127.0.0.1` only, no login.
 
 ```bash
-cp config.example.json config.json   # token 등을 채운다
+cp config.example.json config.json   # fill in the token etc.
 node server.mjs                       # → http://127.0.0.1:8790
 ```
 
-로컬 데이터는 `data/` 에 따로 저장되어 Workers 쪽과 공유되지 않습니다.
+Local data is stored separately in `data/` and is not shared with the Workers deployment.
 
-## 구조
+## Layout
 
 ```
-setup.mjs            설치 · 업데이트 스크립트
-server.mjs           로컬 서버 (Node 내장 모듈만)
-wrangler.jsonc       직접 배포할 때 쓰는 설정 템플릿
-src/worker.js        Workers 진입점 — 로그인 · 세션 · OTP · 정적 파일
-src/api.js           API (로컬 · Workers 공용)
-src/core.js          Cloudflare API 호출 · 범위 계산 · 캐시 규칙
+setup.mjs            install / update script
+server.mjs           local server (Node built-ins only)
+wrangler.jsonc       config template for manual deploys
+src/worker.js        Workers entry — login · sessions · TOTP · static files
+src/api.js           API (shared by local and Workers)
+src/core.js          Cloudflare API calls · scope calculation · cache rule
 src/ip-api.js        IP Rules API
-src/settings.js      설정 항목 · 값 검사
-public/              화면 (index · ip · settings · help)
+src/settings.js      settings schema · validation
+public/              UI (index · ip · settings · help)
 ```
 
-의존성은 없습니다 (QR 코드 생성기 `src/vendor/qrcode.mjs` 는 MIT 라이선스로 포함).
+Zero dependencies (the bundled QR generator `src/vendor/qrcode.mjs` is MIT-licensed).
 
-## 문의 · 기여
+## Feedback
 
-버그나 제안은 [Issues](https://github.com/real21c/cloudflare-admin-toolkit/issues) 에 남겨 주세요.
+Bugs and suggestions → [Issues](https://github.com/real21c/cloudflare-admin-toolkit/issues).
 
-## English
-
-A self-hosted toolkit for Cloudflare admins who manage many zones. It runs on **your own Cloudflare Workers (free plan)** — no external server, no dependencies.
-
-- **Bulk DNS proxy / SSL**: switch A/AAAA records that point to a target IP between Proxied and DNS only, together with the SSL/TLS mode, per group — with preview and revert. Other records are protected server-side.
-- **Cache rules / Tiered Cache / Smart Tiered Cache** on many zones at once.
-- **IP Access Rules**: list, search, classify, delete and change action in bulk.
-- **Change log** (who / when / what), **settings** page, **per-user TOTP** login with an owner role.
-
-Quick start: create an API token (permissions above), then
-
-```bash
-node setup.mjs --init        # creates setup.env (all blank) — fill WORKER_NAME, CF_API_TOKEN, PASSWORD_PREFIX, SERVER_IP
-node setup.mjs               # creates KV, deploys with secrets, prints the URL
-```
-
-The UI and in-app help are in Korean.
-
-## 라이선스
+## License
 
 MIT — [LICENSE](LICENSE)
