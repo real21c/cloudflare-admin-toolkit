@@ -5,7 +5,7 @@
 //   자산존 룰 : 자산존 Allow            notes = "404 guard: asset zone exemption"
 // 이 모듈은 그 룰을 보고 · 지우고 · Action 을 바꾸는 관리 화면용 API 다. (404 감지·등록은 이 도구 밖의 404 가드가 한다)
 //
-// cf-ip-rules-manager(로컬 전용 도구)를 옮긴 것. 달라진 점:
+// 동작 방식:
 //   - Workers 는 요청마다 따로 실행되고 외부 호출이 요청당 50개로 제한된다.
 //     → 목록은 브라우저가 1000건씩 페이지로 받고, 일괄 작업은 호출 40개 이하로 묶어서 보낸다.
 //     → 서버 메모리 캐시가 없으므로 자산존 Allow 룰(mates)은 브라우저가 존 목록에서 찾아 같이 보낸다.
@@ -38,7 +38,7 @@ class RateLimited extends Error {
   constructor(retryAfter) { super('Cloudflare API 한도(5분 1,200회)에 걸렸습니다'); this.retryAfter = retryAfter; }
 }
 
-// ── 분류 규칙 검증 (cf-ip-rules-manager 와 같음) ─────────────────
+// ── 분류 규칙 검증 ───────────────────────────────
 export function validateFilters(cfg) {
   if (!cfg || typeof cfg !== 'object') throw new Error('규칙 형식이 잘못되었습니다.');
   const labels = {};
