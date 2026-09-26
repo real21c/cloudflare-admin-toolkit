@@ -154,6 +154,7 @@ Zero dependencies (the bundled QR generator `src/vendor/qrcode.mjs` is MIT-licen
 ## Feedback
 
 Bugs and suggestions → [Issues](https://github.com/real21c/cloudflare-admin-toolkit/issues).
+Other questions → real21c@gmail.com
 
 ## License
 

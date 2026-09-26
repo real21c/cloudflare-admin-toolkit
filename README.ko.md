@@ -152,6 +152,7 @@ public/              화면 (index · ip · settings · help)
 ## 문의 · 기여
 
 버그나 제안은 [Issues](https://github.com/real21c/cloudflare-admin-toolkit/issues) 에 남겨 주세요.
+기타 문의는 real21c@gmail.com 으로 보내 주세요.
 
 ## 라이선스
 
