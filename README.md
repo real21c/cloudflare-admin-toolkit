@@ -11,6 +11,12 @@ It runs on your own Cloudflare Workers (free plan works). No external server, ze
 
 > **Note:** the UI and the in-app help are in Korean. Timestamps are shown in KST.
 
+**[Try the live demo →](https://cf-admin-demo.now100k.com)** — no login. Everything runs on simulated data (zones, IP rules, history are all fictional) and resets every 30 minutes, so feel free to click anything.
+
+![DNS · SSL/TLS — bulk proxy/SSL switching per group, with cache rules and Tiered Cache](docs/domains.png)
+
+![IP Rules — browse, classify and bulk-manage thousands of IP Access Rules](docs/ip-rules.png)
+
 ---
 
 ## Why

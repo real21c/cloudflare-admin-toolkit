@@ -9,6 +9,12 @@
 **Cloudflare 도메인이 많을 때, 대시보드 메뉴를 하나씩 들어가지 않고 한 화면에서 여러 도메인을 한꺼번에 관리하는 도구입니다.**
 내 Cloudflare 계정의 Workers(무료 요금제)에 직접 올려서 쓰는 셀프호스팅 방식이고, 화면은 한국어입니다.
 
+**[데모 사이트 →](https://cf-admin-demo.now100k.com)** — 로그인 없이 바로 볼 수 있습니다. 도메인 · IP 룰 · 이력 전부 가상 데이터라 마음껏 눌러 봐도 되고, 30분마다 초기화됩니다.
+
+![DNS · SSL/TLS — 그룹 단위 프록시/SSL 일괄 전환, 캐시 규칙 · Tiered Cache](docs/domains.png)
+
+![IP Rules — 수천 개 IP Access Rules 조회 · 분류 · 일괄 관리](docs/ip-rules.png)
+
 ---
 
 ## 왜 만들었나
