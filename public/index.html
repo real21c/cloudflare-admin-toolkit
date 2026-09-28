@@ -79,9 +79,13 @@
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover { background: var(--bg); }
   td.c, th.c { text-align: center; }
+  td.tgl { cursor: pointer; }
+  td.tgl:hover .chip { box-shadow: 0 0 0 1px var(--dimmer) inset; }
   input[type=checkbox] { accent-color: var(--cf-blue); width: 15px; height: 15px; cursor: pointer; }
 
   .dom { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500; }
+  .zmini { display: none; } /* 폰에서만 보이는 도메인 아래 상태 줄 */
+  .mcaret { display: none; } /* 폰에서만 보이는 줄 오른쪽 끝 접기 세모 */
   .dom:hover .dname { color: var(--cf-blue); text-decoration: underline; }
   .caret { color: var(--dimmer); font-size: 10px; width: 9px; }
 
@@ -117,6 +121,14 @@
 
   /* 레코드 펼침 */
   .recs { background: var(--bg); padding: 0 0 0 34px; }
+  /* 펼침 상세의 상태 한 줄 — 열이 다 보이는 넓은 화면에선 숨김 */
+  .zinfo { display: none; flex-wrap: wrap; gap: 6px 8px; padding: 10px 6px 2px; font-size: 13px; }
+  .zinfo .zi { display: inline-flex; align-items: center; }
+  /* 누를 수 있는 항목은 버튼처럼 — 손가락으로 누르기 좋게 */
+  .zinfo .zi.zit { border: 1px solid var(--line); background: var(--panel); padding: 6px 9px; cursor: pointer; }
+  .zinfo .zi.zit:active { background: var(--bg); }
+  .zinfo b { font-weight: 600; font-size: 11px; color: var(--dim); letter-spacing: .02em; }
+  .zinfo .chip { margin-left: 4px; }
   .recs table { background: transparent; }
   .recs th { background: transparent; position: static; border-bottom: 1px solid var(--line-soft); }
   .recs td, .recs th { padding: 6px 12px; font-size: 12.5px; }
@@ -251,6 +263,7 @@
 
   /* 변경 이력 화면 — 도메인 작업용 탭·버튼 숨김 */
   .logmode .tabsrow, .logmode .panel, .logmode #btnRefresh, .logmode #btnConfig { display: none; }
+
   /* 모바일 — 라벨은 위로, 큰 버튼은 세로로 쌓고, 표는 핵심 열만 */
   @media (max-width: 800px) {
     .wrap { padding: 14px 10px; }
@@ -264,19 +277,69 @@
     .logrow .z { min-width: 0; }
     .logrow .l { flex: 1 1 100%; } /* 내용은 항상 제 줄을 통째로 */
     .recs { padding-left: 10px; }
+    /* 펼침 레코드 — 이름(보호 포함)·타입은 줄바꿈 금지, 대신 값 칸이 줄바꿈을 받는다 */
+    .recs td:nth-child(1), .recs td:nth-child(2) { white-space: nowrap; }
+    .recs td:nth-child(3) { word-break: break-all; }
+    .zinfo { display: flex; }
+    td.tgl { cursor: default; } /* 모바일은 목록에서 변경 금지 — 펼침 상세에서 */
+    td.tgl:hover .chip { box-shadow: none; }
     th, td { padding: 8px 6px; }
     .cloud { padding: 3px 5px 3px 4px; gap: 4px; }
     .clouds { gap: 2px; }
+    /* 캐시규칙·Tiered·Smart 열은 숨기지 않고 초소형으로 유지 (토글 안 열어도 보이게) */
+    .card > table > thead > tr > th:nth-child(5),
+    .card > table > thead > tr > th:nth-child(6),
+    .card > table > thead > tr > th:nth-child(7),
+    .card > table > tbody > tr > td:nth-child(5),
+    .card > table > tbody > tr > td:nth-child(6),
+    .card > table > tbody > tr > td:nth-child(7) { padding-left: 3px; padding-right: 3px; }
+    .card > table td.c .chip { margin-left: 0; }
+  }
+  @media (max-width: 520px) {
+    /* 폰 — 그룹·캐시규칙·Tiered·Smart 열은 숨기고,
+       상태는 도메인 이름 아래 둘째 줄(.zmini)로. 도메인 이름은 줄바꿈하지 않는다 */
+    .card > table > thead > tr > th:nth-child(8),
+    .card > table > tbody > tr > td:nth-child(8),
     .card > table > thead > tr > th:nth-child(5),
     .card > table > thead > tr > th:nth-child(6),
     .card > table > thead > tr > th:nth-child(7),
     .card > table > tbody > tr > td:nth-child(5),
     .card > table > tbody > tr > td:nth-child(6),
     .card > table > tbody > tr > td:nth-child(7) { display: none; }
-  }
-  @media (max-width: 520px) {
-    .card > table > thead > tr > th:nth-child(8),
-    .card > table > tbody > tr > td:nth-child(8) { display: none; }
+    /* 줄 정렬 — 체크박스·구름·뱃지·세모는 전부 도메인과 같은 첫 줄에 붙이고,
+       둘째 줄은 캐시·Tiered·Smart 상태만 */
+    .card > table > tbody > tr > td { vertical-align: top; }
+    .card > table > tbody > tr > td:first-child input { margin-top: 3px; }
+    /* 폭 확보 — 0짜리 구름 숨김 · 뱃지와 여백 축소 */
+    .cloud.zero { display: none; }
+    .ssl { padding: 2px 4px; font-size: 11px; }
+    .card > table > thead > tr > th:nth-child(1) { width: 24px !important; }
+    .chip { padding: 1px 4px; margin-left: 3px; }
+    .dom { gap: 3px; white-space: nowrap; max-width: 100%; }
+    /* 이름은 한 줄 고정 — 길면 … 으로 줄인다 (긴 실제 도메인이 표를 옆으로 터뜨리지 않게) */
+    .dname {
+      font-size: 13px; display: inline-block; max-width: calc(100vw - 216px);
+      overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;
+    }
+    .dom .caret { display: none; } /* 이름 앞 세모는 숨기고 줄 오른쪽 끝(.mcaret)으로 */
+    /* SSL 열은 우측 정렬 — Full/Flexible 처럼 폭이 달라도 오른쪽 끝이 나란히.
+       접기 세모는 같은 줄, 뱃지 오른쪽 맨 끝에 고정 */
+    .card > table > thead > tr > th:nth-child(4),
+    .card > table > tbody > tr > td:nth-child(4) { text-align: right; white-space: nowrap; padding-right: 4px; }
+    .card > table > tbody > tr > td:nth-child(4) .ssl { vertical-align: middle; }
+    .mcaret { display: inline-block; vertical-align: middle; margin-left: 5px; padding: 3px 2px; cursor: pointer; }
+    .card th, .card td { padding: 8px 2px; }
+    .cloud { padding: 2px 3px 2px 2px; gap: 3px; font-size: 12px; }
+    .zmini {
+      display: flex; gap: 2px 14px; flex-wrap: nowrap; width: max-content;
+      margin-top: 4px; font-size: 12.5px;
+      /* 도메인 칸보다 길어도 줄바꿈하지 않는다 — 둘째 줄은 옆 칸 아래(빈 공간)까지 이어 쓴다 */
+    }
+    .zmini b { font-weight: 600; font-size: 11px; color: var(--dimmer); margin-right: 4px; }
+    .zmini .zmi { display: inline-flex; align-items: baseline; }
+    .zmini .zmi.on { color: var(--green); font-weight: 700; }
+    .zmini .zmi.off { color: var(--dimmer); }
+    .zmini .zmi.na { color: var(--dimmer); }
   }
 </style>
 </head>
@@ -801,34 +864,42 @@ function render() {
       c.title = 'Automatic SSL/TLS가 켜져 있습니다. 값을 바꾸면 자동으로 Custom으로 전환합니다.';
       tdn.append(c);
     }
+    // 폰: 숨긴 캐시·Tiered·Smart 상태를 도메인 아래 둘째 줄로 (넓은 화면에선 CSS 로 숨김)
+    const mini = el('span', 'zmini');
+    for (const [lab, v] of [['캐시', z.cacheRule], ['Tiered', z.tiered], ['Smart', z.smart]]) {
+      const it = el('span', 'zmi ' + (v === true ? 'on' : v === false ? 'off' : 'na'));
+      it.append(el('b', null, lab));
+      it.append(el('span', null, v === true ? '✓' : v === false ? '—' : '···'));
+      mini.append(it);
+    }
+    tdn.append(mini);
     tr.append(tdn);
 
     tr.append(cloudCell(z));
-    tr.append(sslCell(z));
+    const tds = sslCell(z);
+    // 폰: 접기 세모를 줄 맨 오른쪽 끝(SSL 뒤)에 (넓은 화면에선 CSS 로 숨기고 이름 앞 세모를 쓴다)
+    const mcaret = el('span', 'caret mcaret', state.expanded.has(z.id) ? '▼' : '▶');
+    mcaret.onclick = (e) => { e.stopPropagation(); toggleRecords(z); };
+    tds.append(mcaret);
+    tr.append(tds);
 
-    const tdc2 = el('td', 'c');
-    if (z.cacheRule === true) {
-      const c = el('span', 'chip ok', '적용');
-      c.title = '정적파일 캐시 규칙이 걸려 있습니다';
-      tdc2.append(c);
-    } else if (z.cacheRule === false) {
-      tdc2.append(el('span', 'chip', '없음'));
-    } else {
-      tdc2.append(el('span', 'cloud na', '···'));
-    }
-    tr.append(tdc2);
-
-    const tdt = el('td', 'c');
-    if (z.tiered === true) tdt.append(el('span', 'chip ok', 'ON'));
-    else if (z.tiered === false) tdt.append(el('span', 'chip', 'OFF'));
-    else tdt.append(el('span', 'cloud na', '···'));
-    tr.append(tdt);
-
-    const tds2 = el('td', 'c');
-    if (z.smart === true) tds2.append(el('span', 'chip ok', 'ON'));
-    else if (z.smart === false) tds2.append(el('span', 'chip', 'OFF'));
-    else tds2.append(el('span', 'cloud na', '···'));
-    tr.append(tds2);
+    // 캐시규칙·Tiered·Smart — 값이 있는 셀은 눌러서 이 도메인 하나만 바꿀 수 있다 (··· 는 아직 못 읽음)
+    // 모바일은 폭이 좁아 옆 셀을 잘못 누르기 쉬우므로 목록에선 막고, 펼침 상세(zoneInfoLine)에서 바꾼다
+    const toggleCell = (action, cur, onLabel, offLabel) => {
+      const td = el('td', 'c');
+      if (cur !== true && cur !== false) { td.append(el('span', 'cloud na', '···')); return td; }
+      td.append(el('span', cur ? 'chip ok' : 'chip', cur ? onLabel : offLabel));
+      td.classList.add('tgl');
+      td.title = z.name + ' — 누르면 ' + (cur ? TOGGLE_TEXT[action].off : TOGGLE_TEXT[action].on);
+      td.onclick = () => {
+        if (window.matchMedia('(max-width: 800px)').matches) return;
+        askToggle(z, action, cur);
+      };
+      return td;
+    };
+    tr.append(toggleCell('cache', z.cacheRule, '적용', '없음'));
+    tr.append(toggleCell('tiered', z.tiered, 'ON', 'OFF'));
+    tr.append(toggleCell('smart', z.smart, 'ON', 'OFF'));
 
     const tdg = el('td', 'c');
     const gs = el('select'); gs.className = 'tiny';
@@ -844,7 +915,7 @@ function render() {
 
     if (state.expanded.has(z.id)) {
       const rtr = el('tr'), rtd = el('td', 'recs');
-      rtd.colSpan = 8; rtd.append(recordsTable(z));
+      rtd.colSpan = 8; rtd.append(zoneInfoLine(z)); rtd.append(recordsTable(z));
       rtr.append(rtd); tb.append(rtr);
     }
   }
@@ -925,6 +996,25 @@ function short(n, z) {
 // 대상 서버 IP 가 아닌 레코드는 전부 보호 — 건드리지 않는다
 const isProt = (r) => r.content !== state.serverIp;
 
+// 모바일 전용 — 펼침 상세 맨 위의 상태 줄 (넓은 화면에선 CSS 로 숨김).
+// 캐시·Tiered·Smart 는 눌러서 이 도메인 하나만 바꾼다 (목록 셀 대신 여기서 — 오터치 방지)
+function zoneInfoLine(z) {
+  const d = el('div', 'zinfo');
+  const item = (label, text, on, action, cur) => {
+    const canTap = action && (cur === true || cur === false);
+    const s = el('span', 'zi' + (canTap ? ' zit' : ''));
+    s.append(el('b', null, label));
+    s.append(el('span', 'chip' + (on ? ' ok' : ''), text));
+    if (canTap) s.onclick = () => askToggle(z, action, cur);
+    d.append(s);
+  };
+  item('캐시', z.cacheRule === true ? '적용' : z.cacheRule === false ? '없음' : '···', z.cacheRule === true, 'cache', z.cacheRule);
+  item('Tiered', z.tiered === true ? 'ON' : z.tiered === false ? 'OFF' : '···', z.tiered === true, 'tiered', z.tiered);
+  item('Smart', z.smart === true ? 'ON' : z.smart === false ? 'OFF' : '···', z.smart === true, 'smart', z.smart);
+  item('그룹', z.group || '미분류', false);
+  return d;
+}
+
 function recordsTable(z) {
   const recs = state.records[z.id];
   if (!recs) return el('div', 'empty', '레코드 불러오는 중…');
@@ -975,6 +1065,19 @@ function syncSel() {
 }
 
 // ── dry-run → 적용 ───────────────────────────────────────────
+
+// 캐시규칙·Tiered·Smart 한 개 도메인 전환 (목록 셀 · 펼침 상세 공용)
+const TOGGLE_TEXT = {
+  cache: { on: '정적파일 캐시 규칙을 적용합니다', off: '정적파일 캐시 규칙을 제거합니다' },
+  tiered: { on: 'Tiered Cache 를 켭니다', off: 'Tiered Cache 를 끕니다' },
+  smart: { on: 'Smart Tiered Cache 를 켭니다 (Tiered 스위치가 꺼져 있으면 함께 켭니다)', off: 'Smart Tiered Cache 를 끕니다' },
+};
+function askToggle(z, action, cur) {
+  if (state.busy) return;
+  const msg = cur ? TOGGLE_TEXT[action].off : TOGGLE_TEXT[action].on;
+  if (!confirm(z.name + '\n' + msg + '\n\n진행할까요?')) return;
+  runDirect([z], action, !cur, z.name + ' — ' + msg);
+}
 
 // 미리보기 없이 바로 실행 (캐시 규칙용)
 async function runDirect(zones, action, value, title) {
