@@ -1,21 +1,21 @@
-// IP 룰 관리 — Cloudflare IP Access Rules
+// IP Rule 관리 — Cloudflare IP Access Rules
 //
 // 404 가드가 IP 하나당 두 개를 쌍으로 만든다.
-//   계정 룰   : Interactive Challenge   notes = "추가시간 | URL | User-Agent"
-//   자산존 룰 : 자산존 Allow            notes = "404 guard: asset zone exemption"
-// 이 모듈은 그 룰을 보고 · 지우고 · Action 을 바꾸는 관리 화면용 API 다. (404 감지·등록은 이 도구 밖의 404 가드가 한다)
+//   계정 Rule   : Interactive Challenge   notes = "추가시간 | URL | User-Agent"
+//   자산존 Rule : 자산존 Allow            notes = "404 guard: asset zone exemption"
+// 이 모듈은 그 Rule을 보고 · 지우고 · Action 을 바꾸는 관리 화면용 API 다. (404 감지·등록은 이 도구 밖의 404 가드가 한다)
 //
 // 동작 방식:
 //   - Workers 는 요청마다 따로 실행되고 외부 호출이 요청당 50개로 제한된다.
 //     → 목록은 브라우저가 1000건씩 페이지로 받고, 일괄 작업은 호출 40개 이하로 묶어서 보낸다.
-//     → 서버 메모리 캐시가 없으므로 자산존 Allow 룰(mates)은 브라우저가 존 목록에서 찾아 같이 보낸다.
+//     → 서버 메모리 캐시가 없으므로 자산존 Allow Rule(mates)은 브라우저가 존 목록에서 찾아 같이 보낸다.
 //   - 5분 900회 속도 조절도 브라우저가 한다. 서버는 응답마다 이번에 쓴 호출 수(calls)를 알려 주고,
 //     Cloudflare 가 429 를 주면 거기서 멈추고 rateLimited + retryAfter 를 돌려준다.
 //   - 분류 규칙(filters)은 저장소 ip:filters 에 둔다 (Workers = KV, 로컬 = data/).
 //   - 계정 ID · 자산존 ID 는 토큰으로 자동으로 찾는다 (설정으로 줄 수도 있다).
 //
 // 필요한 토큰 권한: Account > Account Firewall Access Rules > Edit
-//                  Zone > Firewall Services > Edit  (자산존 Allow 룰)
+//                  Zone > Firewall Services > Edit  (자산존 Allow Rule)
 //                  Zone > Zone > Read               (계정·존 ID 찾기 — 도메인 도구 토큰에 이미 있음)
 
 import { DEFAULT_FILTERS } from './ip-filters-default.js';
@@ -156,7 +156,7 @@ export function createIpApi({ store, config, log }) {
       try { await store.put('ip:ids', null); } catch { /* 무시 */ }
     }
   }
-  // 자산존을 쓰도록 설정됐는지 — 설정됐으면 계정 룰 삭제에 자산존 Allow 목록(mates)이 반드시 있어야 한다
+  // 자산존을 쓰도록 설정됐는지 — 설정됐으면 계정 Rule 삭제에 자산존 Allow 목록(mates)이 반드시 있어야 한다
   const pairing = !!(want || config.ipPairZoneId);
 
   function base(scope, id) {
@@ -177,13 +177,13 @@ export function createIpApi({ store, config, log }) {
     return normalize(j.result);
   }
 
-  // 자산존 Allow 룰 먼저 지운다. 하나라도 못 지우면 throw → 계정 룰은 건드리지 않는다 (Allow 만 남는 고아 방지)
+  // 자산존 Allow Rule 먼저 지운다. 하나라도 못 지우면 throw → 계정 Rule은 건드리지 않는다 (Allow 만 남는 고아 방지)
   async function deleteMates(id, item, out) {
     for (const zid of item.mates || []) {
       try { await cfDelete('zone', id, zid); out.paired.push(zid); }
       catch (e) { if (e instanceof RateLimited) throw e; out.pairedErrors.push(zid + ': ' + e.message); }
     }
-    if (out.pairedErrors.length) throw new Error(id.zoneName + ' Allow 룰 삭제 실패로 계정 룰은 그대로 둠 (' + out.pairedErrors.join('; ') + ')');
+    if (out.pairedErrors.length) throw new Error(id.zoneName + ' Allow Rule 삭제 실패로 계정 Rule은 그대로 둠 (' + out.pairedErrors.join('; ') + ')');
   }
 
   // 항목을 차례로 처리한다. 429 를 받으면 거기서 멈추고 나머지는 처리하지 않은 채로 돌려준다.
@@ -211,11 +211,11 @@ export function createIpApi({ store, config, log }) {
     for (const it of items) {
       if (!it || typeof it.id !== 'string' || !ID_RE.test(it.id)) fail('잘못된 규칙 id 가 포함되어 있습니다.');
       if (needMates && !Array.isArray(it.mates)) {
-        throw new Conflict('자산존(' + want + ') Allow 룰 목록을 확인하지 못해 계정 룰을 지우지 않았습니다. 새로고침한 뒤 다시 하세요. (그대로 지우면 자산존 Allow 룰이 고아로 남습니다)');
+        throw new Conflict('자산존(' + want + ') Allow Rule 목록을 확인하지 못해 계정 Rule을 지우지 않았습니다. 새로고침한 뒤 다시 하세요. (그대로 지우면 자산존 Allow Rule이 고아로 남습니다)');
       }
       if (it.mates !== undefined) {
         if (scope !== 'account' || !Array.isArray(it.mates) || it.mates.length > 10 || !it.mates.every((m) => typeof m === 'string' && ID_RE.test(m))) {
-          fail('잘못된 자산존 Allow 룰 id 가 포함되어 있습니다.');
+          fail('잘못된 자산존 Allow Rule id 가 포함되어 있습니다.');
         }
       }
       if (it.configuration !== undefined) {
@@ -242,7 +242,7 @@ export function createIpApi({ store, config, log }) {
   }
   let zoneLabel = want;
   const pairedOnly = (x, what) => logEntry(x.result.value, 'ip-unpair',
-    zoneLabel + ' Allow 룰 ' + x.result.paired.length + '건 삭제 — ' + what + ' 실패: ' + (x.error || 'Cloudflare API 한도'));
+    zoneLabel + ' Allow Rule ' + x.result.paired.length + '건 삭제 — ' + what + ' 실패: ' + (x.error || 'Cloudflare API 한도'));
 
   const ok = (b) => ({ status: 200, body: Object.assign({ calls }, b) });
   const bad = (status, msg, extra) => ({ status, body: Object.assign({ error: msg, calls }, extra || {}) });
@@ -273,12 +273,12 @@ export function createIpApi({ store, config, log }) {
         return ok(Object.assign(out, { zoneName: id.zoneName, zoneEnabled: !!id.zoneId }));
       } catch (e) {
         if (e instanceof RateLimited) return bad(429, e.message, { rateLimited: true, retryAfter: e.retryAfter });
-        // 자산존을 못 찾은 채로 목록을 열면 자산존 Allow 룰을 남긴 채 지우게 된다 — 성공(200)으로 돌려주지 않는다
+        // 자산존을 못 찾은 채로 목록을 열면 자산존 Allow Rule을 남긴 채 지우게 된다 — 성공(200)으로 돌려주지 않는다
         return bad(e.status === 403 || (e.codes || []).includes(10000) ? 403 : 503, e.message);
       }
     }
 
-    if (!token) return bad(400, 'IP 룰용 토큰이 설정되지 않았습니다.');
+    if (!token) return bad(400, 'IP Rule용 토큰이 설정되지 않았습니다.');
 
     try {
       const id = await ids();
@@ -292,7 +292,7 @@ export function createIpApi({ store, config, log }) {
         const list = j.result || [];
         const rules = [];
         for (const r of list) {
-          // 존 목록에는 계정 룰이 상속되어 섞여 온다 — 그 존 소유 룰만
+          // 존 목록에는 계정 Rule이 상속되어 섞여 온다 — 그 존 소유 Rule만
           if (scope === 'zone' && r.scope && r.scope.id && r.scope.id !== id.zoneId) continue;
           rules.push(normalize(r));
         }
@@ -305,12 +305,12 @@ export function createIpApi({ store, config, log }) {
         if (!MODES.includes(body.mode)) return bad(400, '잘못된 mode: ' + body.mode);
         const items = checkItems(body, scope, () => 1);
         const out = await runItems(items, (it) => patchMode(scope, id, it, body.mode));
-        const entries = out.results.filter((r) => r.ok).map((r) => logEntry(r.result.value, 'ip-mode', 'IP 룰 Action → ' + MODE_LABEL[body.mode] + (scope === 'zone' ? ' (' + id.zoneName + ')' : '')));
+        const entries = out.results.filter((r) => r.ok).map((r) => logEntry(r.result.value, 'ip-mode', 'IP Rule Action → ' + MODE_LABEL[body.mode] + (scope === 'zone' ? ' (' + id.zoneName + ')' : '')));
         await safeLog(entries, out);
         return ok(out);
       }
 
-      // 삭제 — 계정 룰이면 자산존 Allow 룰 먼저
+      // 삭제 — 계정 Rule이면 자산존 Allow Rule 먼저
       if (path === '/api/ip/delete' && method === 'POST') {
         const items = checkItems(body, scope, (it) => 1 + ((it.mates || []).length), scope === 'account' && pairing);
         const out = await runItems(items, async (it) => {
@@ -322,17 +322,17 @@ export function createIpApi({ store, config, log }) {
           return r;
         });
         const entries = out.results.filter((x) => x.ok).map((x) => logEntry(x.result.value, 'ip-delete',
-          'IP 룰 삭제' + (scope === 'zone' ? ' (' + id.zoneName + ')' : '') + (x.result.paired.length ? ' + ' + id.zoneName + ' Allow ' + x.result.paired.length + '건' : '') + (x.result.note ? ' — ' + x.result.note : '')));
-        // 계정 룰은 실패했어도 자산존 Allow 를 이미 지웠으면 그것도 남긴다
-        for (const x of out.results) if (!x.ok && x.result && x.result.paired.length) entries.push(pairedOnly(x, '계정 룰 삭제'));
+          'IP Rule 삭제' + (scope === 'zone' ? ' (' + id.zoneName + ')' : '') + (x.result.paired.length ? ' + ' + id.zoneName + ' Allow ' + x.result.paired.length + '건' : '') + (x.result.note ? ' — ' + x.result.note : '')));
+        // 계정 Rule은 실패했어도 자산존 Allow 를 이미 지웠으면 그것도 남긴다
+        for (const x of out.results) if (!x.ok && x.result && x.result.paired.length) entries.push(pairedOnly(x, '계정 Rule 삭제'));
         await safeLog(entries, out);
         return ok(out);
       }
 
-      // 위험차단 — 자산존 Allow 룰만 삭제(unpair). setBlock 이면 계정 룰 Action 도 Block
+      // 위험차단 — 자산존 Allow Rule만 삭제(unpair). setBlock 이면 계정 Rule Action 도 Block
       // Allow 가 Block 보다 우선하므로 순서는 Allow 삭제 → Block
       if (path === '/api/ip/block' && method === 'POST') {
-        if (scope !== 'account') return bad(400, '위험차단은 계정 룰에서만 합니다.');
+        if (scope !== 'account') return bad(400, '위험차단은 계정 Rule에서만 합니다.');
         const setBlock = !!body.setBlock;
         const items = checkItems(body, scope, (it) => (it.mates || []).length + (setBlock && it.mode !== 'block' ? 1 : 0), pairing);
         const out = await runItems(items, async (it) => {
@@ -347,7 +347,7 @@ export function createIpApi({ store, config, log }) {
           return r;
         });
         const entries = out.results.filter((x) => x.ok && (x.result.paired.length || x.result.modeChanged)).map((x) => logEntry(x.result.value, setBlock ? 'ip-block' : 'ip-unpair',
-          (x.result.paired.length ? id.zoneName + ' Allow 룰 삭제' : '') + (x.result.modeChanged ? (x.result.paired.length ? ' + ' : '') + 'Action → Block' : '')));
+          (x.result.paired.length ? id.zoneName + ' Allow Rule 삭제' : '') + (x.result.modeChanged ? (x.result.paired.length ? ' + ' : '') + 'Action → Block' : '')));
         for (const x of out.results) if (!x.ok && x.result && x.result.paired.length) entries.push(pairedOnly(x, setBlock ? 'Block 변경' : '위험차단'));
         await safeLog(entries, out);
         return ok(out);

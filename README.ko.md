@@ -9,7 +9,7 @@
 **Cloudflare 도메인이 많을 때, 대시보드 메뉴를 하나씩 들어가지 않고 한 화면에서 여러 도메인을 한꺼번에 관리하는 도구입니다.**
 내 Cloudflare 계정의 Workers(무료 요금제)에 직접 올려서 쓰는 셀프호스팅 방식이고, 화면은 한국어입니다.
 
-**[데모 사이트 →](https://cf-admin-demo.now100k.com)** — 로그인 없이 바로 볼 수 있습니다. 도메인 · IP 룰 · 이력 전부 가상 데이터라 마음껏 눌러 봐도 되고, 30분마다 초기화됩니다.
+**[데모 사이트 →](https://cf-admin-demo.now100k.com)** — 로그인 없이 바로 볼 수 있습니다. 도메인 · IP Rule · 이력 전부 가상 데이터라 마음껏 눌러 봐도 되고, 30분마다 초기화됩니다.
 
 ![DNS · SSL/TLS — 그룹 단위 프록시/SSL 일괄 전환, 캐시 규칙 · Tiered Cache](docs/domains.png)
 
@@ -27,8 +27,8 @@
 | 메뉴 | 하는 일 |
 |---|---|
 | **DNS · SSL/TLS** | 대상 서버 IP 를 가리키는 A/AAAA 레코드를 Proxied ↔ DNS only 로 일괄 전환 + SSL/TLS 모드 동시 변경 (미리보기 → 적용 · 되돌리기). 정적파일 캐시 규칙 · Tiered Cache · Smart Tiered Cache 일괄 켜기/끄기. 도메인 그룹 관리 |
-| **IP Rules** | 계정 IP Access Rules 조회 · 검색 · 분류(위험 / 애매 / 안전 — 규칙 편집 가능) · 삭제 · Action 변경. 자산존 Allow 예외 룰을 짝으로 함께 관리(선택) |
-| **변경 이력** | 누가 · 언제 · 무엇을 바꿨는지 (도메인 · IP 룰 · OTP · 설정 모두). 프록시 · SSL 은 되돌리기 가능 |
+| **IP Rules** | 계정 IP Access Rules 조회 · 검색 · 분류(위험 / 애매 / 안전 — 규칙 편집 가능) · 삭제 · Action 변경. 자산존 Allow 예외 Rule을 짝으로 함께 관리(선택) |
+| **변경 이력** | 누가 · 언제 · 무엇을 바꿨는지 (도메인 · IP Rule · OTP · 설정 모두). 프록시 · SSL 은 되돌리기 가능 |
 | **설정** | 대상 IP · 기본 그룹 · 캐시 시간 · 자산존 · 호출 상한 · OTP 앱 이름을 화면에서 변경 |
 | **도움말** | 새 Cloudflare 계정에 설치하는 방법 (단계별) |
 
@@ -123,7 +123,7 @@ npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.
 
 - 화면은 한국어, 시간 표시는 한국 시간(KST) 기준입니다
 - 관리 대상 도메인에 Worker **route 를 걸지 마세요**. 그 도메인을 DNS only 로 바꾸는 순간 도구도 끊깁니다. `workers.dev` 주소나 Custom Domain 을 쓰세요
-- **IP Rules** 는 룰 메모가 `추가시간 | URL | User-Agent` 형식이면 칸을 나눠 보여 주고, 아니면 메모 전체를 한 칸에 보여 줍니다. 자산존 짝 기능은 `IP_PAIR_ZONE_NAME` 을 정했을 때만 동작합니다 (메모에 `404 guard` 가 들어간 Allow 룰만 짝으로 봄)
+- **IP Rules** 는 Rule 메모가 `추가시간 | URL | User-Agent` 형식이면 칸을 나눠 보여 주고, 아니면 메모 전체를 한 칸에 보여 줍니다. 자산존 짝 기능은 `IP_PAIR_ZONE_NAME` 을 정했을 때만 동작합니다 (메모에 `404 guard` 가 들어간 Allow Rule만 짝으로 봄)
 - **기본 분류 규칙은 ASP/IIS 서버 기준**입니다 (예: PHP 확장자 요청을 `위험`으로 분류). 다른 서버라면 IP Rules 의 `⚙ 규칙` 에서 맞게 고치세요
 - 캐시 규칙은 설명 `static-assets (cloudflare-admin-toolkit)` 으로 자기 규칙을 찾습니다. 규칙을 건 뒤에 `src/core.js` 의 `CACHE_RULE_DESC` 를 바꾸면 예전 규칙을 못 찾습니다
 - `DNS only` 로 바꾸면 그 레코드는 캐시 · WAF · Workers route 가 모두 빠지고 원서버 IP 가 드러납니다. `Flexible` 은 원서버가 HTTPS 로 리다이렉트하면 무한 리다이렉트가 납니다

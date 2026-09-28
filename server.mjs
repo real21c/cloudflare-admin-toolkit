@@ -39,7 +39,7 @@ try {
   }
 }
 if (!config.token) config.token = process.env.CF_API_TOKEN || '';
-// IP 룰 — 따로 둔 토큰(ipToken)이 없으면 도메인 토큰을 쓴다
+// IP Rule — 따로 둔 토큰(ipToken)이 없으면 도메인 토큰을 쓴다
 if (!config.ipToken) config.ipToken = process.env.CF_IP_TOKEN || config.token;
 if (config.ipPairZoneName === undefined) config.ipPairZoneName = '';
 if (config.ipRateBudget === undefined) config.ipRateBudget = 900;

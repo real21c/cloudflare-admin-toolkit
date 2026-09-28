@@ -9,7 +9,7 @@
 // 묶음 — 설정 화면에서 이 순서로 나눠 보여준다
 export const SECTIONS = [
   { key: 'domain', label: 'DNS · SSL/TLS', help: 'DNS · SSL/TLS 메뉴(프록시 · SSL · 캐시)에서 쓰는 값' },
-  { key: 'ip', label: 'IP Rules', help: 'IP Rules 메뉴(404 가드 룰 관리)에서 쓰는 값' },
+  { key: 'ip', label: 'IP Rules', help: 'IP Rules 메뉴(404 가드 Rule 관리)에서 쓰는 값' },
   { key: 'common', label: '로그인 · 보안', help: '로그인과 2단계 인증(구글 OTP)에 쓰는 값' },
 ];
 
@@ -21,7 +21,7 @@ export const FIELDS = [
   { key: 'otpIssuer', section: 'common', label: 'OTP 앱 이름', type: 'text', max: 30,
     help: '구글 OTP 앱에 보이는 이름. 새로 등록하는 OTP 부터 적용 (이미 등록한 것은 앱에서 이름 수정)' },
   { key: 'ipPairZoneName', section: 'ip', label: '자산존', type: 'domain',
-    help: '404 가드가 IP마다 Allow 예외 룰을 만드는 존. 계정 룰을 지울 때 이 존의 같은 IP Allow 룰도 함께 지운다' },
+    help: '404 가드가 IP마다 Allow 예외 Rule을 만드는 존. 계정 Rule을 지울 때 이 존의 같은 IP Allow Rule도 함께 지운다' },
   { key: 'ipRateBudget', section: 'ip', label: '5분 호출 상한', type: 'int', min: 50, max: 1200, unit: '회',
     help: 'Cloudflare 한도 5분 1,200회를 대시보드·404 가드와 나눠 쓴다. IP Rules 화면이 이 값을 넘지 않게 늦춘다' },
   { key: 'cacheTtlMinutes', section: 'domain', label: '상태 캐시 시간', type: 'int', min: 1, max: 1440, unit: '분',

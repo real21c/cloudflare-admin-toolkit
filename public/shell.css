@@ -60,7 +60,7 @@
 html, body { background: var(--bg); }
 body {
   margin: 0; color: var(--text);
-  font: 400 14px/1.45 Inter, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  font: 400 14px/1.45 Inter, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -73,6 +73,10 @@ body {
 .logo svg { display: block; }
 .grow { flex: 1; }
 .meta { color: var(--dim); font-size: 12.5px; }
+
+/* 모바일 메뉴 버튼 · 드로어 바탕 — shell.js 가 만들고, 데스크톱에선 숨김 */
+.nav-btn { display: none; width: 34px; height: 32px; flex: none; padding: 0; align-items: center; justify-content: center; }
+.nav-bd { display: none; position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.45); }
 
 .wrap { max-width: 1280px; margin: 0 auto; padding: 20px; }
 
@@ -138,7 +142,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .otp-qr { width: 200px; height: 200px; margin: 0 auto 10px; border: 1px solid var(--line); }
 .otp-qr svg { display: block; width: 100%; height: 100%; }
 .otp-key {
-  font-family: ui-monospace, Consolas, monospace; font-size: 13px; letter-spacing: .04em;
+  font-family: inherit; font-size: 13px; letter-spacing: .06em;
   text-align: center; padding: 7px; background: var(--bg); border: 1px solid var(--line-soft);
   margin-bottom: 14px; word-break: break-all; user-select: all;
 }
@@ -146,13 +150,16 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .otp-err { color: var(--red); font-size: 12.5px; margin-top: 8px; min-height: 18px; }
 .otp-msg { font-size: 13.5px; margin-bottom: 12px; }
 #btnOtp.on { color: var(--green); border-color: var(--green); }
-#otpDlg { min-width: min(560px, 92vw); }
+/* 등록일 · 마지막 로그인이 요일까지 나와 표가 넓다 — 창을 그만큼 넓혀 가로 스크롤을 없앤다 */
+#otpDlg { min-width: min(560px, 92vw); max-width: min(980px, 96vw); }
 .otp-me { font-size: 13px; color: var(--dim); margin-bottom: 10px; }
 .otptbl th { position: static; padding: 6px 10px; }
 .otptbl td { padding: 8px 10px; white-space: nowrap; }
 .otptbl td.when { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12.5px; }
-.otptbl td.act { text-align: right; }
+/* 버튼 폭·자리를 통일해 행마다 같은 열에 놓이게 (관리자 행은 버튼이 2개라 마지막 칸이 빈다) */
+.otptbl td.act { text-align: left; }
 .otptbl td.act button + button { margin-left: 4px; }
+.otptbl td.act button.tiny { width: 88px; padding: 0 4px; }
 .otptbl tr.off td.nm, .otptbl tr.off td.when { opacity: .5; }
 .otp-tag { margin-left: 6px; font-size: 11px; padding: 1px 5px; border: 1px solid var(--line); color: var(--dim); }
 .otp-tag.me { border-color: var(--cf-blue); color: var(--cf-blue); }
@@ -181,13 +188,26 @@ button.danger:hover:not(:disabled) { border-color: var(--red); }
 .side a.on { border-left-color: var(--cf-orange); background: var(--bg); font-weight: 600; }
 .side a.on svg { color: var(--cf-orange); }
 .main { flex: 1; min-width: 0; }
+/* 모바일 — 메뉴는 가로 스크롤 대신 왼쪽 드로어(☰)로 연다 */
 @media (max-width: 800px) {
+  .topbar {
+    height: auto; min-height: 52px; padding: 6px 10px; gap: 8px;
+    flex-wrap: wrap; /* 좁으면 버튼들이 통째로 다음 줄로 (글자가 꺾이지 않게) */
+  }
+  .logo { font-size: 14px; }
+  .topbar button.tiny { white-space: nowrap; flex: none; }
+  .nav-btn { display: inline-flex; }
+
   .app { flex-direction: column; align-items: stretch; }
-  .side { flex: none; border-right: none; border-bottom: 1px solid var(--line); }
-  .side-in { position: static; max-height: none; display: flex; overflow-x: auto; padding: 0; }
-  .side .sec { display: none; }
-  .side a { border-left: none; border-bottom: 3px solid transparent; padding: 10px 14px; white-space: nowrap; }
-  .side a.on { border-bottom-color: var(--cf-orange); }
+  .side {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 60; width: 232px; flex: none;
+    border-right: 1px solid var(--line); box-shadow: 0 0 30px rgba(0,0,0,.35);
+    transform: translateX(-110%); transition: transform .18s ease;
+  }
+  body.nav-open .side { transform: translateX(0); }
+  body.nav-open .nav-bd { display: block; }
+  body.nav-open { overflow: hidden; }
+  .side-in { position: static; max-height: 100vh; overflow-y: auto; }
 }
 
 /* OTP 관리 표 — 페이지의 표 스타일과 상관없이 같은 모양 */

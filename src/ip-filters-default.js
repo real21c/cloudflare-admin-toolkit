@@ -1,4 +1,4 @@
-// IP 룰 분류 규칙 기본값
+// IP Rule 분류 규칙 기본값
 // 화면의 '규칙' 에서 고친 값은 저장소(KV / data/) 의 ip:filters 에 따로 저장되고, '기본값 복원' 은 이 값으로 되돌린다.
 
 export const DEFAULT_FILTERS = {

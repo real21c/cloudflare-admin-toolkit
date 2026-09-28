@@ -16,7 +16,7 @@
   .hwrap p { margin: 6px 0; }
   .hwrap ul, .hwrap ol { margin: 6px 0; padding-left: 22px; }
   .hwrap li { margin: 3px 0; }
-  .hwrap code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; background: var(--line-soft); padding: 1px 5px; }
+  .hwrap code { font-family: Consolas, "SFMono-Regular", Menlo, monospace; font-size: 12.5px; background: var(--line-soft); padding: 1px 5px; }
   .card { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 14px 18px; margin: 10px 0; }
   .toc { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 18px; padding-left: 0; list-style: none; }
   .toc a { color: var(--cf-blue); text-decoration: none; }
@@ -34,7 +34,7 @@
   .opt { font-size: 11px; font-weight: 600; padding: 1px 6px; background: var(--line-soft); color: var(--dim); white-space: nowrap; }
   .yes { color: var(--green); font-weight: 600; }
   .pre { position: relative; margin: 8px 0; }
-  .pre pre { margin: 0; background: #1f1f1f; color: #e6e6e6; padding: 12px 14px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .pre pre { margin: 0; background: #1f1f1f; color: #e6e6e6; padding: 12px 14px; overflow-x: auto; font-family: Consolas, "SFMono-Regular", Menlo, monospace; font-size: 12.5px; line-height: 1.55; }
   .pre pre .c { color: #8c8c8c; }
   .pre button { position: absolute; top: 6px; right: 6px; background: #333; color: #ddd; border-color: #444; }
   .pre button:hover:not(:disabled) { background: #444; }
@@ -71,7 +71,7 @@
   <div class="card">
     <b>만드는 것</b>
     <ul>
-      <li><b>API 토큰</b> — 관리할 도메인이 있는 계정에서 발급. 도구가 도메인·IP 룰을 바꿀 때 쓰는 열쇠</li>
+      <li><b>API 토큰</b> — 관리할 도메인이 있는 계정에서 발급. 도구가 도메인·IP Rule을 바꿀 때 쓰는 열쇠</li>
       <li><b>Worker 1개</b> — 이 도구의 코드와 화면 (<code>src/</code>, <code>public/</code>)</li>
       <li><b>KV 1개</b> — 그룹 · 상태 캐시 · 변경 이력 · OTP 목록 · IP 분류 규칙 · 설정 값을 저장</li>
       <li><b>변수</b> — 대상 서버 IP 같은 보통 값. <code>wrangler.jsonc</code> 파일에 적는다</li>
@@ -145,8 +145,8 @@ node setup.mjs                <span class="c"># 설치 (다시 실행하면 업�
   <h3>IP Rules 토큰 → 시크릿 <code>CF_IP_TOKEN</code> <span class="opt">선택</span></h3>
   <div class="tscroll"><table class="tbl">
     <tr><th>항목</th><th>값</th><th>쓰는 곳</th></tr>
-    <tr><td>Permissions</td><td><code>Account · Account Firewall Access Rules · Edit</code></td><td>계정 IP 룰 보기 · 삭제 · Action 변경</td></tr>
-    <tr><td></td><td><code>Zone · Firewall Services · Edit</code></td><td>자산존의 Allow 예외 룰</td></tr>
+    <tr><td>Permissions</td><td><code>Account · Account Firewall Access Rules · Edit</code></td><td>계정 IP Rule 보기 · 삭제 · Action 변경</td></tr>
+    <tr><td></td><td><code>Zone · Firewall Services · Edit</code></td><td>자산존의 Allow 예외 Rule</td></tr>
     <tr><td></td><td><code>Zone · Zone · Read</code></td><td>계정 ID · 자산존 ID 자동으로 찾기</td></tr>
   </table></div>
   <p>따로 만들지 않고 도메인 토큰에 위 권한을 추가해도 됩니다. <code>CF_IP_TOKEN</code> 이 없으면 IP Rules 도 <code>CF_API_TOKEN</code> 을 씁니다.
@@ -202,7 +202,7 @@ npx wrangler whoami     <span class="c"># 로그인한 계정과 계정 ID 확�
     <tr><td><code>CONCURRENCY</code></td><td><code>6</code></td><td>Cloudflare API 를 동시에 부르는 수</td><td>—</td></tr>
     <tr><td><code>MAX_ZONES_PER_CALL</code></td><td><code>5</code></td><td>변경 요청 한 번에 넣는 도메인 수. 무료 요금제는 요청 1건당 외부 호출 50회 제한이라 5 권장</td><td>—</td></tr>
     <tr><td><code>OTP_ISSUER</code></td><td><code>CF Admin</code></td><td>구글 OTP 앱에 보이는 이름. 콜론(:) 금지</td><td class="yes">가능</td></tr>
-    <tr><td><code>IP_PAIR_ZONE_NAME</code></td><td><code>example.com</code></td><td>404 가드가 IP 마다 Allow 예외 룰을 만드는 자산존. 쓰지 않으면 비워 둠 → 계정 IP 룰만 관리</td><td class="yes">가능</td></tr>
+    <tr><td><code>IP_PAIR_ZONE_NAME</code></td><td><code>example.com</code></td><td>404 가드가 IP 마다 Allow 예외 Rule을 만드는 자산존. 쓰지 않으면 비워 둠 → 계정 IP Rule만 관리</td><td class="yes">가능</td></tr>
     <tr><td><code>IP_RATE_BUDGET</code></td><td><code>900</code></td><td>IP Rules 화면이 5분 동안 쓰는 API 호출 상한. Cloudflare 한도 1,200회를 대시보드 등과 나눠 씀</td><td class="yes">가능</td></tr>
     <tr><td><code>IP_ACCOUNT_ID</code><br><code>IP_PAIR_ZONE_ID</code></td><td>(비움)</td><td>보통 적지 않음 — 토큰으로 자동으로 찾음. IP Rules 토큰이 여러 계정에 걸쳐 있을 때만 계정 ID 를 적음</td><td>—</td></tr>
   </table></div>
@@ -280,7 +280,7 @@ node server.mjs                         <span class="c"># → http://127.0.0.1:8
     <tr><th>증상</th><th>해결</th></tr>
     <tr><td>"PASSWORD_PREFIX / SESSION_SECRET 시크릿이 설정되지 않았습니다"</td><td>6단계 시크릿 넣기</td></tr>
     <tr><td>도메인 목록이 안 나오거나 토큰 오류 안내</td><td><code>CF_API_TOKEN</code> 값 · 권한 · Zone Resources 확인 (1단계)</td></tr>
-    <tr><td>IP Rules "토큰에 IP 룰 권한이 없습니다" (10000)</td><td><code>CF_IP_TOKEN</code> 을 넣거나 도메인 토큰에 IP 권한 추가 (1단계)</td></tr>
+    <tr><td>IP Rules "토큰에 IP Rule 권한이 없습니다" (10000)</td><td><code>CF_IP_TOKEN</code> 을 넣거나 도메인 토큰에 IP 권한 추가 (1단계)</td></tr>
     <tr><td>IP Rules "자산존 ... 을(를) 찾을 수 없습니다"</td><td>자산존 이름 확인, 또는 쓰지 않으면 <code>IP_PAIR_ZONE_NAME</code> 을 비움</td></tr>
     <tr><td>대시보드에서 넣은 값이 배포 후 사라짐</td><td>Type 을 <code>Secret</code> 으로 다시 넣기 (6단계)</td></tr>
     <tr><td>엉뚱한 계정에 배포됨</td><td><code>wrangler.jsonc</code> 에 <code>account_id</code> 적기 (4단계)</td></tr>

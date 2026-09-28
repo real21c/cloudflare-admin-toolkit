@@ -178,7 +178,7 @@ if (!has('--skip-token-check')) {
     }
     if (acct) {
       const a = await cf(ipToken, '/accounts/' + acct + '/firewall/access_rules/rules?per_page=1');
-      say(a.ok ? '  IP Rules 토큰: 계정 IP 룰 읽기 가능' : '  ⚠ IP Rules 토큰으로 계정 IP 룰을 못 읽었습니다 (' + a.msg + ') — IP Rules 메뉴만 안 되고 나머지는 됩니다');
+      say(a.ok ? '  IP Rules 토큰: 계정 IP Rule 읽기 가능' : '  ⚠ IP Rules 토큰으로 계정 IP Rule을 못 읽었습니다 (' + a.msg + ') — IP Rules 메뉴만 안 되고 나머지는 됩니다');
     }
   }
 }

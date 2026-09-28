@@ -41,7 +41,7 @@
     "MAX_ZONES_PER_CALL": "5",
     // 구글 OTP 앱에 표시되는 이름. 바꾸면 새로 등록하는 OTP 부터 반영된다.
     "OTP_ISSUER": "CF Admin",
-    // IP Rules — 404 가드가 계정 챌린지와 쌍으로 Allow 룰을 만드는 자산존. 쓰지 않으면 비워 둔다
+    // IP Rules — 404 가드가 계정 챌린지와 쌍으로 Allow Rule을 만드는 자산존. 쓰지 않으면 비워 둔다
     "IP_PAIR_ZONE_NAME": "",
     // IP Rules 화면이 5분 동안 쓸 Cloudflare API 호출 상한 (한도 1,200회를 대시보드 등과 나눠 씀)
     "IP_RATE_BUDGET": "900"

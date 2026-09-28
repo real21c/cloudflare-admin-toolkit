@@ -9,8 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/shell.css">
 <style>
-  /* IP 룰 */
-  :root { --mono: ui-monospace, Consolas, "Cascadia Mono", monospace; }
+  /* IP Rule */
+  :root { --mono: Inter, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; } /* 메뉴와 같은 글씨체 (숫자는 tabular-nums 로 정렬) */
   [hidden] { display: none !important; }
   .ipmain { padding: 0 20px 20px; }
 
@@ -52,10 +52,10 @@
   .iptbl th .arrow { color: var(--cf-blue); margin-left: 4px; }
   .iptbl tbody tr:hover td { background: var(--bg); }
   .iptbl tr.selected td { background: var(--cf-blue-bg); }
-  .iptbl td.ip { font-family: var(--mono); white-space: nowrap; font-size: 12.5px; }
+  .iptbl td.ip { font-family: var(--mono); white-space: nowrap; font-size: 12.5px; font-variant-numeric: tabular-nums; }
   .iptbl td.ip > .ipwrap { display: flex; align-items: center; min-width: 0; }
   .iptbl td.ip .ipval { overflow: hidden; text-overflow: ellipsis; }
-  .iptbl td.time { font-family: var(--mono); white-space: nowrap; font-size: 12.5px; color: var(--dim); }
+  .iptbl td.time { font-family: var(--mono); white-space: nowrap; font-size: 12.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .iptbl td.url, .iptbl td.ua { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .iptbl td.ua { color: var(--dim); }
   .iptbl td.url .host { color: var(--dimmer); }
@@ -126,6 +126,38 @@
   #progFill { height: 100%; width: 0; background: var(--cf-orange); transition: width .2s; }
   .prog-text { font-family: var(--mono); font-size: 14px; }
   .prog-sub { color: var(--dim); font-size: 12.5px; min-height: 18px; margin: 4px 0 14px; }
+  /* 모바일 — 추가시간·User-Agent 열을 접는다.
+     fixed 레이아웃은 display:none 해도 열 폭이 남으므로 폭을 0 으로 만든다 */
+  @media (max-width: 800px) {
+    .toolbar input[type=text] { min-width: 0; }
+    .rule-add input.pat, .rule-add input.note { min-width: 0; }
+    /* 폰에선 글자를 한 단계 키운다 */
+    .iptbl th, .iptbl td { font-size: 14px; }
+    .iptbl td.ip { font-size: 13.5px; }
+    .iptbl td.act select { font-size: 13.5px; height: 30px; }
+    .tag { font-size: 12px; }
+    .seg button { font-size: 14px; height: 34px; }
+    .iptbl col { width: auto !important; }
+    .iptbl th:nth-child(1) { width: 32px; }
+    .iptbl th:nth-child(2) { width: 112px; }
+    .iptbl th:nth-child(6) { width: 118px; }
+    .iptbl th:nth-child(7) { width: 34px; }
+    .iptbl th:nth-child(3), .iptbl td:nth-child(3),
+    .iptbl th:nth-child(5), .iptbl td:nth-child(5) {
+      width: 0 !important; max-width: 0; padding: 0 !important; overflow: hidden; font-size: 0; border: none;
+    }
+    .iptbl td.act select { width: 100%; }
+    /* IP 값이 우선 — 자산존 태그 쪽을 줄인다 */
+    .iptbl td.ip .ipval { flex: none; }
+    .iptbl td.ip .tag { overflow: hidden; text-overflow: ellipsis; }
+  }
+  /* 폰 폭 — URL 열도 접고 IP 열에 폭을 몰아준다 */
+  @media (max-width: 520px) {
+    .iptbl th:nth-child(4), .iptbl td:nth-child(4) {
+      width: 0 !important; max-width: 0; padding: 0 !important; overflow: hidden; font-size: 0; border: none;
+    }
+    .iptbl th:nth-child(2) { width: auto; }
+  }
 </style>
 </head>
 <body>
@@ -154,7 +186,7 @@
     <h1>IP Rules</h1>
     <div class="stats">전체 <b id="cntTotal">-</b> · 표시 <b id="cntShown">-</b> · 선택 <b id="cntSel">0</b></div>
     <div class="right">
-      <select id="scopeSel" hidden title="계정 룰 / 자산존 룰"><option value="account">계정 룰</option><option value="zone">존 룰</option></select>
+      <select id="scopeSel" hidden title="계정 Rule / 자산존 Rule"><option value="account">계정 Rule</option><option value="zone">존 Rule</option></select>
     </div>
   </div>
 
@@ -188,7 +220,7 @@
   <section class="cats" id="cats">
     <button class="cat all active" data-cat=""><span class="lbl">전체</span><b>-</b></button>
     <button class="cat attack" data-cat="attack" title="URL 또는 User-Agent 가 뻔한 공격/스캔 패턴"><span class="lbl">위험</span><b>-</b></button>
-    <button id="btnBlockAll" class="danger" disabled hidden title="현재 목록의 위험 IP 에 남아 있는 자산존 Allow 룰만 삭제"><span class="lbl">위험</span>차단<b>-</b></button>
+    <button id="btnBlockAll" class="danger" disabled hidden title="현재 목록의 위험 IP 에 남아 있는 자산존 Allow Rule만 삭제"><span class="lbl">위험</span>차단<b>-</b></button>
     <button class="cat gray" data-cat="gray" title="위험도 안전도 아닌 나머지"><span class="lbl">애매</span><b>-</b></button>
     <button class="cat clean" data-cat="clean" title="css/js/이미지/폰트/문서 등 정적 파일, 브라우저 자동 요청"><span class="lbl">안전</span><b>-</b></button>
     <button id="btnRules" title="분류 규칙 조회/수정">⚙ 규칙</button>
@@ -321,8 +353,8 @@ let page = 1, pages = 1, sortKey = 'time', sortDir = -1, scope = 'account', catF
 // 경로 필터: num6 = "/193961" 처럼 숫자 6자리만 있는 경로 (쿼리 제외)
 const PATH_FILTERS = { num6: (r) => /^\/\d{6}$/.test(((r.pp && r.pp.path) || '').split('?')[0].split('#')[0]) };
 let configured = false, cfgOk = false, zoneEnabled = false, zoneName = '자산존', maxCalls = 40;
-// 자산존 Allow 룰 — IP → 그 IP 의 404 가드 Allow 룰 id 목록 (계정 룰을 지울 때 같이 지운다)
-// pairsOk — 자산존 Allow 목록을 제대로 받았는지. 못 받았으면 계정 룰 삭제·위험차단을 막는다 (자산존 Allow 가 고아로 남으므로)
+// 자산존 Allow Rule — IP → 그 IP 의 404 가드 Allow Rule id 목록 (계정 Rule을 지울 때 같이 지운다)
+// pairsOk — 자산존 Allow 목록을 제대로 받았는지. 못 받았으면 계정 Rule 삭제·위험차단을 막는다 (자산존 Allow 가 고아로 남으므로)
 let pairs = new Map(), pairsOk = false;
 let loadedScope = 'account'; // 지금 표에 있는 목록의 범위 (불러오는 중 전환해도 섞이지 않게)
 let FCFG = { labels: { attack: '위험', gray: '애매', clean: '안전' }, rules: [] }, compiled = [], ruleTab = 'attack';
@@ -384,7 +416,7 @@ async function api(method, url, body) {
   }
   return j;
 }
-const PERM_HELP = '토큰에 IP 룰 권한이 없습니다. Cloudflare → My Profile → API Tokens → 이 도구 토큰 → Edit 에서\n'
+const PERM_HELP = '토큰에 IP Rule 권한이 없습니다. Cloudflare → My Profile → API Tokens → 이 도구 토큰 → Edit 에서\n'
   + '  Account · Account Firewall Access Rules · Edit\n  Zone · Firewall Services · Edit\n를 추가하세요. (토큰 값은 그대로라 다시 넣을 필요 없음)';
 function showError(prefix, e) {
   el.banner.className = 'banner';
@@ -494,7 +526,7 @@ async function fetchAll(sc, label) {
   }
   return [...out.values()];
 }
-// 404 가드가 만든 자산존 Allow 예외 룰인지 (사람이 직접 만든 Allow 룰은 건드리지 않는다)
+// 404 가드가 만든 자산존 Allow 예외 Rule인지 (사람이 직접 만든 Allow Rule은 건드리지 않는다)
 const isGuardAllow = (z) => z.mode === 'whitelist' && (z.target === 'ip' || z.target === 'ip6') && /404 guard/i.test(z.notes || '');
 function setPairs(zoneRules) {
   pairs = new Map();
@@ -514,7 +546,7 @@ async function readConfig() {
   if (cfg.zoneName) zoneName = cfg.zoneName;
   rate.budget = Number(cfg.rateBudget) || 900; rate.windowMs = (Number(cfg.rateWindowSec) || 300) * 1000;
   el.scopeSel.hidden = !zoneEnabled;
-  el.scopeSel.options[1].textContent = zoneName + ' 룰';
+  el.scopeSel.options[1].textContent = zoneName + ' Rule';
   cfgOk = true;
 }
 
@@ -527,21 +559,21 @@ async function load() {
   $('btnRefresh').disabled = true; el.scopeSel.disabled = true;
   try {
     if (!cfgOk) await readConfig(); // 처음에 설정을 못 읽었으면 다시 시도
-    if (!configured) throw Object.assign(new Error('IP 룰용 토큰이 설정되지 않았습니다.'), { status: 0 });
-    const list = await fetchAll(sc, sc === 'zone' ? zoneName + ' 룰' : '계정 룰');
+    if (!configured) throw Object.assign(new Error('IP Rule용 토큰이 설정되지 않았습니다.'), { status: 0 });
+    const list = await fetchAll(sc, sc === 'zone' ? zoneName + ' Rule' : '계정 Rule');
     all = list; selected.clear(); loadedScope = sc;
     for (const r of all) { classify(r); r.pair = false; }
     pairs = new Map(); pairsOk = !(sc === 'account' && zoneEnabled);
     let pairErr = '';
     if (sc === 'account' && zoneEnabled) {
-      try { setPairs(await fetchAll('zone', zoneName + ' Allow 룰')); }
+      try { setPairs(await fetchAll('zone', zoneName + ' Allow Rule')); }
       catch (e) { pairErr = e.status === 403 ? PERM_HELP + '\n(' + e.message + ')' : e.message; }
     }
     el.fetchedAt.textContent = '조회: ' + new Date().toLocaleString('ko-KR', { hour12: false });
     applyFilter();
     if (pairErr) {
       el.banner.className = 'banner';
-      el.banner.textContent = `${zoneName} Allow 룰 목록 조회 실패 — 계정 룰 삭제·위험차단을 막았습니다 (지우면 ${zoneName} Allow 룰이 고아로 남음). 새로고침한 뒤 작업하세요.\n${pairErr}`;
+      el.banner.textContent = `${zoneName} Allow Rule 목록 조회 실패 — 계정 Rule 삭제·위험차단을 막았습니다 (지우면 ${zoneName} Allow Rule이 고아로 남음). 새로고침한 뒤 작업하세요.\n${pairErr}`;
       el.banner.hidden = false;
     }
   } catch (e) {
@@ -630,7 +662,7 @@ function render() {
   el.tbody.innerHTML = slice.map((r) => `
     <tr data-id="${esc(r.id)}" class="${selected.has(r.id) ? 'selected' : ''}">
       <td><input type="checkbox" class="sel" ${selected.has(r.id) ? 'checked' : ''}></td>
-      <td class="ip" title="${esc(r.value)}"><span class="ipwrap"><span class="ipval">${esc(r.value)}</span>${r.target && r.target !== 'ip' ? `<span class="tag">${esc(r.target)}</span>` : ''}${r.pair ? `<span class="tag pair" title="${esc(zoneName)} Allow 룰 있음 (삭제 시 함께 삭제)">${tagName}</span>` : ''}</span></td>
+      <td class="ip" title="${esc(r.value)}"><span class="ipwrap"><span class="ipval">${esc(r.value)}</span>${r.target && r.target !== 'ip' ? `<span class="tag">${esc(r.target)}</span>` : ''}${r.pair ? `<span class="tag pair" title="${esc(zoneName)} Allow Rule 있음 (삭제 시 함께 삭제)">${tagName}</span>` : ''}</span></td>
       <td class="time" title="created: ${esc(r.created_on)}">${esc(r.time || (r.created_on || '').replace('T', ' ').slice(0, 19))}</td>
       <td class="url" title="${esc(urlTitle(r))}"><span class="dot ${esc(r.cat)}"></span>${r.url ? urlHtml(r) : '<span style="color:var(--dim)">' + esc(r.notes || '-') + '</span>'}${r.url ? '<button class="flag" title="이 URL 경로로 규칙 추가">⚑</button>' : ''}</td>
       <td class="ua" title="${esc(r.ua)}">${esc(r.ua)}</td>
@@ -680,11 +712,11 @@ function itemFor(op, r) {
   if (needPairs && pairsOk) it.mates = matesOf(r);
   return it;
 }
-// 자산존 Allow 목록을 모르는데 계정 룰을 지우려는 경우 — 막는다
+// 자산존 Allow 목록을 모르는데 계정 Rule을 지우려는 경우 — 막는다
 function pairsBlocked(op) {
   const needPairs = (op === 'delete' && loadedScope === 'account') || op === 'unpair' || op === 'block';
   if (!needPairs || !zoneEnabled || pairsOk) return false;
-  toast(`${zoneName} Allow 룰 목록을 확인하지 못해 막았습니다. 새로고침한 뒤 다시 하세요.`, 'err', 6000);
+  toast(`${zoneName} Allow Rule 목록을 확인하지 못해 막았습니다. 새로고침한 뒤 다시 하세요.`, 'err', 6000);
   return true;
 }
 const callsOf = (op, it) => callsFor(op, Object.assign({ mates: [] }, it));
@@ -705,7 +737,7 @@ function opBody(op, items, mode) {
 }
 
 // ---------- single actions ----------
-const pairNote = () => (loadedScope === 'account' && zoneEnabled && pairsOk ? `\n(${zoneName} Allow 룰도 함께 삭제됩니다)` : '');
+const pairNote = () => (loadedScope === 'account' && zoneEnabled && pairsOk ? `\n(${zoneName} Allow Rule도 함께 삭제됩니다)` : '');
 function pairSummary(paired, errors) {
   let s = paired ? ` (+${zoneName} Allow ${paired}건)` : '';
   if (errors && errors.length) s += `\n${zoneName} Allow 삭제 실패 ${errors.length}건: ${errors.slice(0, 2).join('; ')}`;
@@ -718,7 +750,7 @@ function removeLocal(ids) {
 }
 async function single(op, r, mode) {
   const it = itemFor(op, r);
-  if (op !== 'mode' && pairsBlocked(op)) throw new Error(`${zoneName} Allow 룰 목록을 확인하지 못해 막았습니다. 새로고침한 뒤 다시 하세요.`);
+  if (op !== 'mode' && pairsBlocked(op)) throw new Error(`${zoneName} Allow Rule 목록을 확인하지 못해 막았습니다. 새로고침한 뒤 다시 하세요.`);
   await acquire(callsFor(op, it), (s) => toast(`Cloudflare API 한도 대기 ${Math.ceil(s.waitMs / 1000)}초`, '', 1500));
   const j = await api('POST', OP_PATH[op], opBody(op, [it], mode));
   const x = j.results[0];
@@ -755,8 +787,8 @@ async function deleteOne(id) {
   } catch (e) { toast('삭제 실패: ' + e.message, 'err', 6000); }
 }
 
-// ---------- 위험차단: 현재 목록의 위험 IP 에 남아 있는 자산존 Allow 룰("404 guard: asset zone exemption")만 삭제 ----------
-// 계정 룰(Interactive Challenge)은 그대로 둔다 → 그 IP 는 자산존에서도 챌린지를 받게 된다.
+// ---------- 위험차단: 현재 목록의 위험 IP 에 남아 있는 자산존 Allow Rule("404 guard: asset zone exemption")만 삭제 ----------
+// 계정 Rule(Interactive Challenge)은 그대로 둔다 → 그 IP 는 자산존에서도 챌린지를 받게 된다.
 // 대상은 자산존 태그가 있는 위험만 (이미 없는 것은 제외 → 버튼 숫자가 0 이면 할 일 없음)
 const needsBlock = (r) => r.cat === 'attack' && r.pair;
 function updateBlockBtn() {
@@ -765,7 +797,7 @@ function updateBlockBtn() {
   const n = b.hidden ? 0 : shown.filter(needsBlock).length;
   b.querySelector('b').textContent = n.toLocaleString();
   b.disabled = n === 0;
-  b.title = `현재 목록의 ${L('attack')} 중 ${zoneName} Allow 룰이 남아 있는 ${n.toLocaleString()}건: 그 Allow 룰만 삭제 (계정 룰은 그대로)`;
+  b.title = `현재 목록의 ${L('attack')} 중 ${zoneName} Allow Rule이 남아 있는 ${n.toLocaleString()}건: 그 Allow Rule만 삭제 (계정 Rule은 그대로)`;
 }
 function etaLine(totalCalls) {
   const s = rateStatus();
@@ -777,8 +809,8 @@ async function blockAll() {
   const targets = shown.filter(needsBlock);
   if (!targets.length || pairsBlocked('unpair')) return;
   const calls = targets.reduce((n, r) => n + callsOf('unpair', itemFor('unpair', r)), 0);
-  const msg = `현재 목록의 ${L('attack')} ${targets.length.toLocaleString()}건의 ${zoneName} Allow 룰(404 guard: asset zone exemption)을 삭제할까요?\n\n`
-    + `계정 룰(Interactive Challenge)은 그대로 두고, 이 IP 들은 ${zoneName} 에서도 챌린지를 받게 됩니다.` + etaLine(calls);
+  const msg = `현재 목록의 ${L('attack')} ${targets.length.toLocaleString()}건의 ${zoneName} Allow Rule(404 guard: asset zone exemption)을 삭제할까요?\n\n`
+    + `계정 Rule(Interactive Challenge)은 그대로 두고, 이 IP 들은 ${zoneName} 에서도 챌린지를 받게 됩니다.` + etaLine(calls);
   if (!confirm(msg)) return;
   await bulk('unpair', null, { ids: targets.map((r) => r.id), confirmed: true });
 }
@@ -821,7 +853,7 @@ async function bulk(op, mode, opts = {}) {
     const calls = queue.reduce((s, it) => s + callsOf(op, it), 0);
     if (!confirm(`선택한 ${n}건을 ${label}할까요?${op === 'delete' ? pairNote() : ''}${etaLine(calls)}`)) return;
   }
-  const title = { delete: `${n}건 삭제 중…`, mode: `${n}건 Action 변경 중…`, unpair: `${n}건 ${zoneName} Allow 룰 삭제 중…`, block: `${n}건 차단 중…` }[op];
+  const title = { delete: `${n}건 삭제 중…`, mode: `${n}건 Action 변경 중…`, unpair: `${n}건 ${zoneName} Allow Rule 삭제 중…`, block: `${n}건 차단 중…` }[op];
   showProgress(title, queue.length);
   const okIds = [], goneIds = [], fails = [], pairErrs = [];
   let paired = 0, changed = 0, done = 0, stopped = false, rateRetries = 0, logError = '';
@@ -859,7 +891,7 @@ async function bulk(op, mode, opts = {}) {
         done++;
         if (!x.ok) {
           fails.push(x);
-          // 계정 룰은 실패했어도 자산존 Allow 는 이미 지워졌을 수 있다 — 태그를 내린다
+          // 계정 Rule은 실패했어도 자산존 Allow 는 이미 지워졌을 수 있다 — 태그를 내린다
           if (x.result && (x.result.paired || []).length) { paired += x.result.paired.length; const fr = byId(x.id); if (fr) dropPair(fr.value); }
           continue;
         }
@@ -872,7 +904,7 @@ async function bulk(op, mode, opts = {}) {
           continue;
         }
         if (op === 'mode') { if (r) { Object.assign(r, res); classify(r); r.pair = loadedScope === 'account' && pairs.has(r.value); } continue; }
-        // unpair/block: 자산존 Allow 가 지워졌으면 태그 제거, Action 이 바뀐 룰은 갱신, 그 사이 CF 에서 지워진 룰은 목록에서 제거
+        // unpair/block: 자산존 Allow 가 지워졌으면 태그 제거, Action 이 바뀐 Rule은 갱신, 그 사이 CF 에서 지워진 Rule은 목록에서 제거
         paired += (res.paired || []).length; pairErrs.push(...(res.pairedErrors || []));
         if (res.modeChanged) changed++;
         if (res.gone) { goneIds.push(x.id); continue; }
@@ -898,7 +930,7 @@ async function bulk(op, mode, opts = {}) {
   applyFilter({ keepPage: true });
   let head;
   if (op === 'unpair') {
-    head = `${okIds.length.toLocaleString()}건 처리${stopped ? ' 후 중지됨' : ' 완료'} (${zoneName} Allow 룰 ${paired.toLocaleString()}건 삭제)`;
+    head = `${okIds.length.toLocaleString()}건 처리${stopped ? ' 후 중지됨' : ' 완료'} (${zoneName} Allow Rule ${paired.toLocaleString()}건 삭제)`;
   } else if (op === 'block') {
     const parts = [`Block 변경 ${changed.toLocaleString()}건`];
     if (zoneEnabled) parts.push(`${zoneName} Allow 삭제 ${paired.toLocaleString()}건`);

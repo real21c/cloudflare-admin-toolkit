@@ -53,6 +53,8 @@ function renderSide() {
     a.onclick = (e) => {
       // Ctrl/Shift/Cmd 클릭·가운데 클릭은 브라우저에 맡긴다 (새 탭으로 열기)
       if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      document.body.classList.remove('nav-open'); // 모바일 드로어 닫기
+
       // 같은 페이지 안의 이동(DNS · SSL/TLS ↔ 변경 이력)은 새로 불러오지 않고 화면만 바꾼다
       const u = new URL(m.href, location.href);
       if (!(isIndex(u.pathname) && isIndex(location.pathname))) return;
@@ -321,7 +323,14 @@ async function otpOwnerStep(kind) {
 }
 
 // ── 관리 화면 ──
-const fmtWhen = (s) => (s ? s.slice(5, 16) : '—');
+// '2026-09-25 13:26:34' → '2026-09-25(금) 13:26:34' (변경 이력과 같은 표기)
+const WHEN_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const fmtWhen = (s) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(s || '');
+  if (!m) return s || '—';
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay();
+  return m[1] + '-' + m[2] + '-' + m[3] + '(' + WHEN_DAYS[d] + ')' + m[4];
+};
 
 function renderOtpPanel() {
   const body = $('#otpB');
@@ -418,6 +427,19 @@ $('#otpDlg').addEventListener('mousedown', (ev) => { if (ev.target === ev.curren
 // ── 시작 ──
 function init() {
   renderSide();
+  // 모바일 — 상단 바 맨 앞에 메뉴(☰) 버튼, 드로어 바탕 (데스크톱에선 CSS 로 숨김)
+  const bar = document.querySelector('.topbar');
+  if (bar) {
+    const nb = el('button', 'nav-btn');
+    nb.type = 'button';
+    nb.title = '메뉴';
+    nb.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>';
+    nb.onclick = () => document.body.classList.toggle('nav-open');
+    bar.prepend(nb);
+    const bd = el('div', 'nav-bd');
+    bd.onclick = () => document.body.classList.remove('nav-open');
+    document.body.append(bd);
+  }
   const b = $('#btnOtp');
   if (b) b.onclick = async () => {
     await otpStatus(); // 다른 창에서 바뀌었을 수 있으니 누를 때마다 새로 읽는다

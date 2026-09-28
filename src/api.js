@@ -436,7 +436,7 @@ export function createApi({ store, config }) {
   // ── 라우팅 ──────────────────────────────────────────────
   // 반환: { status, body }
   return async function handle(method, path, query, body) {
-    // IP 룰 모듈 — 토큰(config.ipToken)이 따로라서 도메인 토큰이 없어도 동작한다. 변경은 같은 변경 이력에 남긴다.
+    // IP Rule 모듈 — 토큰(config.ipToken)이 따로라서 도메인 토큰이 없어도 동작한다. 변경은 같은 변경 이력에 남긴다.
     // 요청마다 새로 만든다 (로컬 서버는 요청이 겹칠 수 있어서 호출 수 calls 가 섞이지 않게)
     if (path.startsWith('/api/ip/')) return createIpApi({ store, config, log: appendLog })(method, path, query, body || {});
 

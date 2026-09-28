@@ -61,7 +61,7 @@
     margin-left: 7px; font-size: 11.5px; opacity: .65; font-variant-numeric: tabular-nums;
   }
   .seg button.on .cnt2 { opacity: .9; }
-  .seg button .ip { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+  .seg button .ip { font-family: inherit; font-size: 12.5px; }
 
   /* 카드 + 테이블 */
   .card {
@@ -123,7 +123,7 @@
   .recs td { border-bottom: 1px solid var(--line-soft); }
   .recs tr.protrow td { background: var(--protrow); }
   .recs tr.protrow:hover td { background: var(--protrow-hi); }
-  .mono { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 12px; color: var(--dim); }
+  .mono { font-family: inherit; font-size: 12px; color: var(--dim); }
 
   /* 작업 패널 — 라벨 열을 맞추고 줄마다 구분선 */
   .panel {
@@ -140,7 +140,7 @@
   .pbody { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .phint { font-size: 12px; color: var(--dim); }
   .expr {
-    font-family: ui-monospace, Consolas, monospace; font-size: 11.5px;
+    font-family: inherit; font-size: 11.5px;
     color: var(--dim); line-height: 1.4; word-break: break-all;
   }
 
@@ -148,7 +148,7 @@
   .actbar { margin-bottom: 16px; }
   .acttitle { font-size: 13px; color: var(--dim); margin-bottom: 10px; }
   .acttitle b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .acttitle .ipv { font-family: ui-monospace, Consolas, monospace; color: var(--cf-orange-dk); font-weight: 600; }
+  .acttitle .ipv { font-family: inherit; font-variant-numeric: tabular-nums; color: var(--cf-orange-dk); font-weight: 600; }
   .actrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; row-gap: 14px; }
   .actdiv { width: 1px; height: 26px; background: var(--line); margin: 0 4px; }
 
@@ -218,7 +218,7 @@
   .logrow {
     display: flex; gap: 14px; align-items: baseline; padding: 7px 14px;
     border-bottom: 1px solid var(--line-soft);
-    font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+    font-family: inherit; font-variant-numeric: tabular-nums; font-size: 12.5px;
   }
   .logrow:last-child { border-bottom: none; }
   .logrow .t { color: var(--dimmer); white-space: nowrap; }
@@ -251,6 +251,33 @@
 
   /* 변경 이력 화면 — 도메인 작업용 탭·버튼 숨김 */
   .logmode .tabsrow, .logmode .panel, .logmode #btnRefresh, .logmode #btnConfig { display: none; }
+  /* 모바일 — 라벨은 위로, 큰 버튼은 세로로 쌓고, 표는 핵심 열만 */
+  @media (max-width: 800px) {
+    .wrap { padding: 14px 10px; }
+    .prow { flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px; }
+    .plabel { flex: 0 0 100%; text-align: left; }
+    button.act { width: 100%; height: auto; min-height: 58px; padding: 10px 14px; }
+    button.act .actsub { white-space: normal; text-align: left; }
+    .actdiv { display: none; }
+    .ovl-box { min-width: 0; width: 92vw; padding: 20px; }
+    .logrow { flex-wrap: wrap; gap: 2px 10px; font-size: 13.5px; }
+    .logrow .z { min-width: 0; }
+    .logrow .l { flex: 1 1 100%; } /* 내용은 항상 제 줄을 통째로 */
+    .recs { padding-left: 10px; }
+    th, td { padding: 8px 6px; }
+    .cloud { padding: 3px 5px 3px 4px; gap: 4px; }
+    .clouds { gap: 2px; }
+    .card > table > thead > tr > th:nth-child(5),
+    .card > table > thead > tr > th:nth-child(6),
+    .card > table > thead > tr > th:nth-child(7),
+    .card > table > tbody > tr > td:nth-child(5),
+    .card > table > tbody > tr > td:nth-child(6),
+    .card > table > tbody > tr > td:nth-child(7) { display: none; }
+  }
+  @media (max-width: 520px) {
+    .card > table > thead > tr > th:nth-child(8),
+    .card > table > tbody > tr > td:nth-child(8) { display: none; }
+  }
 </style>
 </head>
 <body>

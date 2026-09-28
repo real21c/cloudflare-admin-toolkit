@@ -6,8 +6,8 @@
 //
 // 필요한 시크릿:
 //   CF_API_TOKEN     Cloudflare API 토큰 (Zone:Read / DNS:Edit / Zone Settings:Edit / Cache Rules:Edit)
-//                    IP 룰 메뉴도 이 토큰을 쓴다 → Account Firewall Access Rules:Edit, Zone Firewall Services:Edit 추가
-//   CF_IP_TOKEN      (선택) IP 룰용 토큰을 따로 두려면
+//                    IP Rule 메뉴도 이 토큰을 쓴다 → Account Firewall Access Rules:Edit, Zone Firewall Services:Edit 추가
+//   CF_IP_TOKEN      (선택) IP Rule용 토큰을 따로 두려면
 //   PASSWORD_PREFIX  비밀번호 접두어. 실제 비밀번호는 <접두어>!<오늘 날짜 2자리>
 //   SESSION_SECRET   세션 쿠키 서명용 임의 문자열
 
@@ -323,7 +323,7 @@ export default {
         maxZonesPerCall: Number(env.MAX_ZONES_PER_CALL || 5),
         // 변경 이력에 남길 이름 — 로그인한 OTP 의 이름 (비밀번호만이면 없음)
         actor: sess.dev ? sess.dev.name : null,
-        // IP 룰 — 따로 둔 토큰이 없으면 도메인 토큰을 쓴다 (그 토큰에 IP 룰 권한을 추가하면 된다)
+        // IP Rule — 따로 둔 토큰이 없으면 도메인 토큰을 쓴다 (그 토큰에 IP Rule 권한을 추가하면 된다)
         ipToken: env.CF_IP_TOKEN || env.CF_API_TOKEN || '',
         ipAccountId: env.IP_ACCOUNT_ID || '',
         ipPairZoneId: env.IP_PAIR_ZONE_ID || '',
