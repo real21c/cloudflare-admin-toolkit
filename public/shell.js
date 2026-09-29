@@ -41,6 +41,22 @@ export function currentMenu() {
 let sideCollapsed = false;
 try { sideCollapsed = localStorage.getItem('side-collapsed') === '1'; } catch (e) { /* 무시 */ }
 
+// 테마 — system(OS 따라감, 기본) / light / dark. 브라우저별로 기억한다
+const THEMES = ['system', 'light', 'dark'];
+let theme = 'system';
+try { if (THEMES.includes(localStorage.getItem('theme'))) theme = localStorage.getItem('theme'); } catch (e) { /* 무시 */ }
+function applyTheme() {
+  if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+  else document.documentElement.removeAttribute('data-theme');
+}
+applyTheme();
+const THEME_ICON = {
+  system: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="1"/><path d="M8 21h8M12 17v4"/></svg>',
+  light: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  dark: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+};
+const THEME_LABEL = { system: '시스템 (OS 따라감)', light: '라이트', dark: '다크' };
+
 function renderSide() {
   const side = $('#side');
   if (!side) return;
@@ -73,7 +89,7 @@ function renderSide() {
   }
   // 하단 왼쪽 — 메뉴 접기/펴기 토글 (데스크톱 전용, 모바일 드로어에선 CSS 로 숨김)
   const foot = el('div', 'side-foot');
-  const tg = el('button', 'side-tg');
+  const tg = el('button', 'side-tg side-cl');
   const paint = () => {
     tg.innerHTML = sideCollapsed
       ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 5l7 7-7 7M13 5l7 7-7 7"/></svg>'
@@ -88,6 +104,20 @@ function renderSide() {
   };
   paint();
   foot.append(tg);
+  // 테마 전환 — 시스템 → 라이트 → 다크 순환
+  const th = el('button', 'side-tg side-th');
+  const paintTheme = () => {
+    th.innerHTML = THEME_ICON[theme];
+    th.title = '테마: ' + THEME_LABEL[theme] + ' — 누르면 전환';
+  };
+  th.onclick = () => {
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+    try { localStorage.setItem('theme', theme); } catch (e) { /* 무시 */ }
+    applyTheme();
+    paintTheme();
+  };
+  paintTheme();
+  foot.append(th);
   nav.append(foot);
 }
 

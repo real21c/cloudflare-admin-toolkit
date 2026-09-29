@@ -55,6 +55,29 @@
     --shadow: 0 1px 2px rgba(0,0,0,.4);
   }
 }
+/* 수동 다크 — 위 미디어 블록과 같은 값 (테마 토글이 data-theme 를 단다. 값을 바꿀 땐 두 곳 함께) */
+:root[data-theme="dark"] {
+  --bg: #1d1d1d;
+  --panel: #262626;
+  --line: #3a3a3a;
+  --line-soft: #333333;
+  --text: #e3e3e3;
+  --dim: #a5a5a5;
+  --dimmer: #7c7c7c;
+
+  --cf-orange-bg: #3a2610;
+  --cf-blue: #6ba4ff;
+  --cf-blue-dk: #8ab8ff;
+  --cf-blue-bg: #14243d;
+
+  --green: #3fc79a; --green-bg: #12291f;
+  --red: #f06a6c;   --red-bg: #301718;
+  --amber: #e0983c; --amber-bg: #2e2313;
+  --gray-cloud: #6f6f6f;
+  --protrow: #2a1a1a;
+  --protrow-hi: #341f1f;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
 
 * { box-sizing: border-box; }
 html, body { background: var(--bg); }
@@ -192,8 +215,8 @@ button.danger:hover:not(:disabled) { border-color: var(--red); }
 .side a.on svg { color: var(--cf-orange); }
 .main { flex: 1; min-width: 0; }
 
-/* 메뉴 하단 접기/펴기 토글 (대시보드처럼 왼쪽 아래) */
-.side-foot { margin-top: auto; padding: 8px 12px 2px; border-top: 1px solid var(--line-soft); }
+/* 메뉴 하단 — 접기/펴기 + 테마 토글 (대시보드처럼 왼쪽 아래) */
+.side-foot { margin-top: auto; padding: 8px 12px 2px; border-top: 1px solid var(--line-soft); display: flex; gap: 4px; }
 .side-tg {
   width: 32px; height: 30px; padding: 0; display: inline-flex;
   align-items: center; justify-content: center; color: var(--dim);
@@ -206,7 +229,7 @@ body.side-collapsed .side a span { display: none; }
 body.side-collapsed .side a { justify-content: center; padding: 11px 0; }
 body.side-collapsed .side .sec { visibility: hidden; height: 10px; padding: 6px 0 0; }
 body.side-collapsed .side .demo-note { display: none; }
-body.side-collapsed .side-foot { padding-left: 0; padding-right: 0; text-align: center; }
+body.side-collapsed .side-foot { padding-left: 0; padding-right: 0; flex-direction: column; align-items: center; }
 /* 모바일 — 메뉴는 가로 스크롤 대신 왼쪽 드로어(☰)로 연다 */
 @media (max-width: 800px) {
   .topbar {
@@ -226,9 +249,9 @@ body.side-collapsed .side-foot { padding-left: 0; padding-right: 0; text-align: 
   body.nav-open .side { transform: translateX(0); }
   body.nav-open .nav-bd { display: block; }
   body.nav-open { overflow: hidden; }
-  .side-in { position: static; max-height: 100vh; overflow-y: auto; min-height: 0; }
-  /* 드로어에는 접기 개념이 없다 — 접힘 상태여도 항상 전체 메뉴 */
-  .side-foot { display: none; }
+  .side-in { position: static; max-height: none; overflow-y: auto; min-height: 0; height: 100%; }
+  /* 드로어에는 접기 개념이 없다 — 접힘 상태여도 항상 전체 메뉴. 테마 토글만 남긴다 */
+  .side-cl { display: none; }
   body.side-collapsed .side { width: 232px; }
   body.side-collapsed .side a span { display: inline; }
   body.side-collapsed .side a { justify-content: flex-start; padding: 9px 18px 9px 15px; }

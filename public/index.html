@@ -43,7 +43,11 @@
     letter-spacing: .03em; min-width: 46px; white-space: nowrap;
   }
   .bar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 6px; }
-  #q { min-width: 220px; }
+  #q { min-width: 220px; height: 30px; margin-bottom: 5px; }
+  /* 변경 이력 필터 — 이력 화면에서만 보인다 */
+  .logbar { display: none; }
+  .logmode .logbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .logbar #logQ { flex: 1; min-width: 200px; }
   .selinfo { font-size: 13px; color: var(--dim); white-space: nowrap; }
   .selinfo b { color: var(--text); font-weight: 600; }
 
@@ -371,6 +375,7 @@
   <div class="tabsrow">
     <div class="tabs" id="tabs"></div>
     <span class="grow"></span>
+    <input type="text" id="q" placeholder="도메인 검색" autocomplete="off" spellcheck="false">
     <span class="tabactions">
       <button class="ghost tiny" id="btnNewGroup">+ 그룹 만들기</button>
       <button class="ghost tiny hide" id="btnRenameGroup">이름 변경</button>
@@ -432,6 +437,21 @@
   <div class="progress hide" id="prog"><i></i></div>
 
   <div id="view"></div>
+  <div class="logbar" id="logBar">
+    <input type="text" id="logQ" placeholder="검색 — 도메인, 내용, 사람" autocomplete="off" spellcheck="false">
+    <select id="logKind">
+      <option value="">종류 전체</option>
+      <option value="proxy">프록시</option>
+      <option value="ssl">SSL</option>
+      <option value="cache">캐시규칙</option>
+      <option value="tiered">Tiered Cache</option>
+      <option value="smart">Smart</option>
+      <option value="ip">IP Rule</option>
+      <option value="otp">2단계 인증</option>
+      <option value="settings">설정</option>
+      <option value="revert">되돌리기</option>
+    </select>
+  </div>
   <div id="logView" class="hide"></div>
 </div>
 </main>
@@ -797,8 +817,11 @@ async function cleanOrphans() {
 }
 
 // ── 목록 ────────────────────────────────────────────────────
+let domainQuery = ''; // 도메인 검색어 (소문자)
+
 function visibleZones() {
   return state.zones.filter((z) => {
+    if (domainQuery && z.name.toLowerCase().indexOf(domainQuery) === -1) return false;
     if (state.tab === '__none__') return !z.group;
     if (state.tab !== '__all__') return z.group === state.tab;
     return true;
@@ -1358,16 +1381,44 @@ function withDay(ts) {
   return m[1] + '-' + m[2] + '-' + m[3] + '(' + DAYS[d] + ')' + m[4];
 }
 
+let logCache = []; // 마지막으로 받은 이력 — 검색·필터는 여기서 화면만 거른다
+
+// 이력 한 건이 검색어·종류 필터에 맞는지
+function logMatch(e, q, kind) {
+  if (kind) {
+    const a = String(e.action || '');
+    if (kind === 'proxy') { if (a !== 'proxy' && a !== 'proxy-fail') return false; }
+    else if (kind === 'ip' || kind === 'otp') { if (a.indexOf(kind + '-') !== 0) return false; }
+    else if (a !== kind) return false;
+  }
+  if (q) {
+    const hay = ((e.zone || '') + ' ' + (e.label || '') + ' ' + (e.by || '')).toLowerCase();
+    if (hay.indexOf(q) === -1) return false;
+  }
+  return true;
+}
+
 async function renderLog() {
   const wrap = $('#logView');
   wrap.innerHTML = '<div class="card"><div class="empty">불러오는 중…</div></div>';
-  const d = await api('/api/log?limit=300');
-  $('#freshness').textContent = '최근 ' + d.entries.length + '건';
+  const d = await api('/api/log?limit=1000');
+  logCache = d.entries;
+  drawLog();
+}
+
+function drawLog() {
+  const wrap = $('#logView');
+  const q = $('#logQ').value.trim().toLowerCase();
+  const kind = $('#logKind').value;
+  const entries = (q || kind) ? logCache.filter((e) => logMatch(e, q, kind)) : logCache;
+  $('#freshness').textContent = (q || kind)
+    ? logCache.length + '건 중 ' + entries.length + '건'
+    : '최근 ' + logCache.length + '건';
 
   const card = el('div', 'card');
-  if (!d.entries.length) card.append(el('div', 'empty', '변경 이력이 없습니다.'));
+  if (!entries.length) card.append(el('div', 'empty', logCache.length ? '조건에 맞는 이력이 없습니다.' : '변경 이력이 없습니다.'));
 
-  for (const e of d.entries) {
+  for (const e of entries) {
     const row = el('div', 'logrow' + (e.action === 'proxy-fail' ? ' fail' : '') + (e.reverted ? ' rev' : ''));
     row.append(el('span', 't', withDay(e.ts)));
     row.append(el('span', 'z', e.zone));
@@ -1379,6 +1430,7 @@ async function renderLog() {
         if (!confirm(e.zone + '\n' + e.label + '\n\n되돌릴까요?')) return;
         b.disabled = true; b.textContent = '…';
         try { await api('/api/revert', { method: 'POST', body: JSON.stringify({ id: e.id }) }); await renderLog(); await loadZones(); }
+        // 되돌리면 이력을 새로 받아 다시 그린다 (위 renderLog 가 처리)
         catch (err) { alert('되돌리기 실패: ' + err.message); b.disabled = false; b.textContent = '되돌리기'; }
       };
       row.append(b);
@@ -1443,6 +1495,18 @@ $('#btnDelGroup').onclick = () => deleteGroup(state.tab);
 // 새로고침 = SSL·프록시만 (가벼움). 설정은 '설정 다시 읽기' 로 따로.
 $('#btnRefresh').onclick = async () => { if (loadRunning) return; await loadZones(); await fillStatus(true); };
 $('#btnConfig').onclick = async () => { if (loadRunning) return; await fillConfig(true); };
+
+// 도메인 검색 — 이름에 포함되면 표시, 검색 결과가 곧 체크(작업 대상)가 된다
+$('#q').oninput = () => {
+  domainQuery = $('#q').value.trim().toLowerCase();
+  selectAllVisible(); renderBar(); render();
+};
+$('#q').onkeydown = (e) => { if (e.key === 'Escape') { $('#q').value = ''; $('#q').oninput(); } };
+
+// 변경 이력 검색·종류 필터 — 받아 둔 이력에서 화면만 거른다
+$('#logQ').oninput = () => drawLog();
+$('#logQ').onkeydown = (e) => { if (e.key === 'Escape') { $('#logQ').value = ''; drawLog(); } };
+$('#logKind').onchange = () => drawLog();
 window.addEventListener('shell:route', syncView);
 $('#dlgCancel').onclick = () => { if (!state.busy) $('#dlg').close(); };
 
