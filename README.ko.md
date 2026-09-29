@@ -32,6 +32,12 @@
 | **설정** | 대상 IP · 기본 그룹 · 캐시 시간 · 자산존 · 호출 상한 · OTP 앱 이름을 화면에서 변경 |
 | **도움말** | 새 Cloudflare 계정에 설치하는 방법 (단계별) |
 
+화면
+- **도메인 검색** — 검색창에 입력하면 이름에 포함된 도메인만 보이고, 검색 결과가 곧 체크(작업 대상)가 됩니다 (검색 → 바로 적용). 변경 이력에도 검색창(도메인 · 내용 · 사람)과 종류 필터가 따로 있습니다
+- **개별 전환** — 캐시규칙 · Tiered · Smart 값을 눌러서 그 도메인 하나만 켜고 끌 수 있습니다. 데스크톱은 값 셀 클릭, 모바일은 도메인을 펼쳐서 나오는 버튼 (확인창을 거치고 일괄 작업처럼 이력에 남음)
+- **모바일 지원** — 드로어 메뉴(☰), 도메인당 2줄 목록. 데스크톱에서는 왼쪽 아래 토글로 메뉴를 아이콘 레일로 접을 수 있습니다
+- **테마** — 시스템 / 라이트 / 다크. 왼쪽 아래 토글로 전환하고 브라우저별로 기억됩니다
+
 안전장치
 - 대상 IP 가 아닌 레코드(메일 · 다른 서버 등)는 `보호` — 화면에서 골라도 **서버가 막습니다**
 - 적용 직전에 Cloudflare 에서 현재 상태를 **다시 읽고** 판단합니다 (대시보드에서 누가 바꿨어도 안전)
@@ -39,7 +45,7 @@
 
 로그인
 - 비밀번호 + **사람별 구글 OTP**. 처음 등록한 사람이 관리자 — 다른 사람 추가 · 사용중지 · 삭제 (사용중지하면 그 사람 창도 즉시 끊김)
-- 세션 12시간, IP 당 10분에 10번 틀리면 잠시 막힘
+- 세션 12시간. 무차별 대입 방어: **IP 당 10분에 10번** 틀리면 잠시 막히고, 한 번 쓴 OTP 코드는 **다음 코드로 바뀔 때까지 재사용 불가**, 관리자 확인 코드(추가 · 휴대폰 변경 · 전체 해제)는 **10분에 5번** 틀리면 잠깁니다
 
 ## 빠른 시작 — 명령 하나로 설치
 
@@ -109,6 +115,22 @@ npx wrangler delete --config wrangler.setup.jsonc
 npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.jsonc   # KV id 는 .setup-state.json 에 있음
 ```
 
+수동으로 설치했다면(`setup.mjs` 를 안 썼다면) 같은 명령을 `--config wrangler.setup.jsonc` 없이 실행하거나, 대시보드에서 Worker 와 KV 네임스페이스를 삭제하면 됩니다.
+
+## 복구
+
+- **비밀번호(접두어)를 잊었을 때** — 시크릿을 다시 넣고 새 값으로 로그인합니다:
+
+```bash
+npx wrangler secret put PASSWORD_PREFIX --config wrangler.setup.jsonc   # 수동 설치면 --config … 는 뺍니다
+```
+
+- **관리자 휴대폰을 잃어버렸을 때** (관리자 확인 코드를 아무도 못 넣을 때) — OTP 목록을 지우면 비밀번호만으로 로그인하는 상태로 돌아갑니다. 로그인 후 바로 2단계 인증을 다시 등록하세요:
+
+```bash
+npx wrangler kv key delete otp:devices --binding BDM_KV --remote --config wrangler.setup.jsonc
+```
+
 ## 비용과 한도
 
 모두 무료 요금제 안에서 동작합니다.
@@ -127,6 +149,8 @@ npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.
 - **기본 분류 규칙은 ASP/IIS 서버 기준**입니다 (예: PHP 확장자 요청을 `위험`으로 분류). 다른 서버라면 IP Rules 의 `⚙ 규칙` 에서 맞게 고치세요
 - 캐시 규칙은 설명 `static-assets (cloudflare-admin-toolkit)` 으로 자기 규칙을 찾습니다. 규칙을 건 뒤에 `src/core.js` 의 `CACHE_RULE_DESC` 를 바꾸면 예전 규칙을 못 찾습니다
 - `DNS only` 로 바꾸면 그 레코드는 캐시 · WAF · Workers route 가 모두 빠지고 원서버 IP 가 드러납니다. `Flexible` 은 원서버가 HTTPS 로 리다이렉트하면 무한 리다이렉트가 납니다
+- 캐시규칙 · Tiered · Smart 칸의 `···` 는 "아직 못 읽음"입니다 — 상단 **설정 다시 읽기**를 눌러 보고, 그대로면 토큰에 `Zone Settings` / `Cache Rules` 권한이 있는지 확인하세요
+- 작업 중 Cloudflare API 한도에 걸리면 도구가 멈추고 알려 줍니다 — 잠시 뒤 이어서 하면 됩니다
 
 ## 로컬 실행 (선택)
 

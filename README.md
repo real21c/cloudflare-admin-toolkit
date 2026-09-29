@@ -34,6 +34,12 @@ This toolkit does that **per group, in one action**, with a **preview** of what 
 | **Settings** | Change the target IP, default group, cache TTL, asset zone, API-call budget and OTP issuer from the UI |
 | **Help** | Step-by-step install guide (in Korean) |
 
+UI
+- **Domain search** — the search box filters the list by name, and the filtered set becomes the work target (search → apply in one flow). The change log has its own text search (domain / content / person) and a type filter
+- **Per-domain toggles** — the cache rule / Tiered / Smart values are clickable: click the cell on desktop, or the buttons in the expanded row on mobile (confirm dialog, logged like bulk actions)
+- **Works on phones** — drawer menu (☰), two-line domain rows; on desktop the sidebar collapses to an icon rail with the bottom-left toggle
+- **Theme** — system / light / dark, switched with the bottom-left toggle and remembered per browser
+
 Safeguards
 - Records that do not point at the target IP (mail, other servers, …) are **protected** — the server refuses to change them even if selected in the UI
 - The current state is **re-read from Cloudflare right before applying** — safe even if someone changed things in the dashboard meanwhile
@@ -41,7 +47,7 @@ Safeguards
 
 Login
 - Password + **per-user TOTP** (Google Authenticator or any RFC 6238 app). The first person to register becomes the owner — only the owner can add, disable or delete others (disabling kills that person's sessions immediately)
-- 12-hour sessions; 10 failures per IP within 10 minutes gets blocked for a while
+- 12-hour sessions. Brute force is limited: **10 failed logins per IP within 10 minutes** blocks that IP for a while, a used OTP code **cannot be reused** until it rotates, and the owner-verification code (add / rekey / disable-all) locks after **5 wrong tries in 10 minutes**
 
 ## Quick start — one command
 
@@ -111,6 +117,22 @@ npx wrangler delete --config wrangler.setup.jsonc
 npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.jsonc   # the KV id is in .setup-state.json
 ```
 
+If you installed manually (without `setup.mjs`), run the same commands without `--config wrangler.setup.jsonc`, or delete the Worker and the KV namespace in the dashboard.
+
+## Recovery
+
+- **Forgot the password prefix** — set the secret again, then log in with the new one:
+
+```bash
+npx wrangler secret put PASSWORD_PREFIX --config wrangler.setup.jsonc   # drop --config … if you installed manually
+```
+
+- **The owner's phone is lost** (no one can pass owner verification) — clear the OTP list; the tool falls back to password-only login, then register TOTP again right away:
+
+```bash
+npx wrangler kv key delete otp:devices --binding BDM_KV --remote --config wrangler.setup.jsonc
+```
+
 ## Cost and limits
 
 Everything fits in the free plan.
@@ -129,6 +151,8 @@ Everything fits in the free plan.
 - **The default IP classification rules assume an ASP/IIS origin** (e.g. requests for PHP extensions are classified as risky). On other stacks, adjust them under `⚙ 규칙` in the IP Rules screen
 - The cache rule finds itself by its description string `static-assets (cloudflare-admin-toolkit)` (`CACHE_RULE_DESC` in `src/core.js`). If you change it after rules were deployed, old rules will no longer be found
 - Switching a record to `DNS only` bypasses cache, WAF and Workers routes and exposes the origin IP. `Flexible` causes a redirect loop if the origin forces HTTPS
+- `···` in the cache rule / Tiered / Smart columns means "not read yet" — press **설정 다시 읽기** (re-read settings) in the top bar; if it stays, the token lacks the `Zone Settings` / `Cache Rules` permissions
+- If the Cloudflare API rate limit is hit mid-batch, the tool stops and tells you — just continue a moment later
 
 ## Local run (optional)
 
