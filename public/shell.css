@@ -173,7 +173,10 @@ button.danger:hover:not(:disabled) { border-color: var(--red); }
    메뉴 배경(nav)은 본문 높이만큼 늘어나고, 안쪽(.side-in)만 스크롤해도 화면에 붙어 있다 */
 .app { display: flex; align-items: stretch; min-height: calc(100vh - 56px); }
 .side { flex: 0 0 196px; background: var(--panel); border-right: 1px solid var(--line); }
-.side-in { position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: 10px 0; }
+.side-in {
+  position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: 10px 0;
+  display: flex; flex-direction: column; min-height: calc(100vh - 56px);
+}
 .side .sec {
   font-size: 11px; font-weight: 600; color: var(--dimmer); letter-spacing: .05em;
   padding: 14px 18px 6px;
@@ -188,6 +191,22 @@ button.danger:hover:not(:disabled) { border-color: var(--red); }
 .side a.on { border-left-color: var(--cf-orange); background: var(--bg); font-weight: 600; }
 .side a.on svg { color: var(--cf-orange); }
 .main { flex: 1; min-width: 0; }
+
+/* 메뉴 하단 접기/펴기 토글 (대시보드처럼 왼쪽 아래) */
+.side-foot { margin-top: auto; padding: 8px 12px 2px; border-top: 1px solid var(--line-soft); }
+.side-tg {
+  width: 32px; height: 30px; padding: 0; display: inline-flex;
+  align-items: center; justify-content: center; color: var(--dim);
+  background: transparent; border-color: transparent;
+}
+.side-tg:hover { color: var(--text); border-color: var(--line); }
+/* 접힌 상태 — 아이콘만 남는 좁은 레일 */
+body.side-collapsed .side { flex: 0 0 56px; }
+body.side-collapsed .side a span { display: none; }
+body.side-collapsed .side a { justify-content: center; padding: 11px 0; }
+body.side-collapsed .side .sec { visibility: hidden; height: 10px; padding: 6px 0 0; }
+body.side-collapsed .side .demo-note { display: none; }
+body.side-collapsed .side-foot { padding-left: 0; padding-right: 0; text-align: center; }
 /* 모바일 — 메뉴는 가로 스크롤 대신 왼쪽 드로어(☰)로 연다 */
 @media (max-width: 800px) {
   .topbar {
@@ -207,7 +226,14 @@ button.danger:hover:not(:disabled) { border-color: var(--red); }
   body.nav-open .side { transform: translateX(0); }
   body.nav-open .nav-bd { display: block; }
   body.nav-open { overflow: hidden; }
-  .side-in { position: static; max-height: 100vh; overflow-y: auto; }
+  .side-in { position: static; max-height: 100vh; overflow-y: auto; min-height: 0; }
+  /* 드로어에는 접기 개념이 없다 — 접힘 상태여도 항상 전체 메뉴 */
+  .side-foot { display: none; }
+  body.side-collapsed .side { width: 232px; }
+  body.side-collapsed .side a span { display: inline; }
+  body.side-collapsed .side a { justify-content: flex-start; padding: 9px 18px 9px 15px; }
+  body.side-collapsed .side .sec { visibility: visible; height: auto; padding: 14px 18px 6px; }
+  body.side-collapsed .side .demo-note { display: block; }
 }
 
 /* OTP 관리 표 — 페이지의 표 스타일과 상관없이 같은 모양 */

@@ -37,17 +37,23 @@ export function currentMenu() {
   return '';
 }
 
+// 메뉴 접힘 상태 — 기억해 둔다 (시크릿 창 등에서 localStorage 가 막혀 있으면 그냥 펴진 상태)
+let sideCollapsed = false;
+try { sideCollapsed = localStorage.getItem('side-collapsed') === '1'; } catch (e) { /* 무시 */ }
+
 function renderSide() {
   const side = $('#side');
   if (!side) return;
   side.innerHTML = '';
   const nav = el('div', 'side-in');
   side.append(nav);
+  document.body.classList.toggle('side-collapsed', sideCollapsed);
   const cur = currentMenu();
   for (const m of MENU) {
     if (m.sec) { nav.append(el('div', 'sec', m.sec)); continue; }
     const a = el('a', m.key === cur ? 'on' : '');
     a.href = m.href;
+    a.title = m.label; // 접었을 때 툴팁
     a.innerHTML = m.icon; // 위 ICON 상수 (고정 SVG)
     a.append(el('span', null, m.label));
     a.onclick = (e) => {
@@ -65,6 +71,24 @@ function renderSide() {
     };
     nav.append(a);
   }
+  // 하단 왼쪽 — 메뉴 접기/펴기 토글 (데스크톱 전용, 모바일 드로어에선 CSS 로 숨김)
+  const foot = el('div', 'side-foot');
+  const tg = el('button', 'side-tg');
+  const paint = () => {
+    tg.innerHTML = sideCollapsed
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 5l7 7-7 7M13 5l7 7-7 7"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 5l-7 7 7 7M11 5l-7 7 7 7"/></svg>';
+    tg.title = sideCollapsed ? '메뉴 펴기' : '메뉴 접기';
+  };
+  tg.onclick = () => {
+    sideCollapsed = !sideCollapsed;
+    try { localStorage.setItem('side-collapsed', sideCollapsed ? '1' : '0'); } catch (e) { /* 무시 */ }
+    document.body.classList.toggle('side-collapsed', sideCollapsed);
+    paint();
+  };
+  paint();
+  foot.append(tg);
+  nav.append(foot);
 }
 
 function route() {
