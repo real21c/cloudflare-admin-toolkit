@@ -28,22 +28,22 @@ This toolkit does that **per group, in one action**, with a **preview** of what 
 
 | Menu | What it does |
 |---|---|
-| **DNS · SSL/TLS** | Bulk-switch A/AAAA records pointing at your target server IP between Proxied ↔ DNS only, together with the SSL/TLS mode, per group (preview → apply · revert). Bulk enable/disable a static-asset cache rule, Tiered Cache and Smart Tiered Cache. Zone groups |
-| **IP Rules** | Browse · search · classify (risky / unclear / safe — editable rules) · delete · change action on account IP Access Rules, in bulk. Optionally manages paired Allow exception rules on an asset zone |
-| **Change log** | Who / when / what, across domains, IP rules, OTP and settings. Proxy · SSL changes can be reverted |
-| **Settings** | Change the target IP, default group, cache TTL, asset zone, API-call budget and OTP issuer from the UI |
+| **DNS · SSL/TLS** | Bulk-switch A/AAAA records pointing at your target server IP, per group, with the two headline actions **Proxied + Flexible** and **DNS only + Full** (preview → apply · revert). Bulk enable/disable a static-asset cache rule, Tiered Cache and Smart Tiered Cache. Zone groups |
+| **IP Rules** | Browse · search · classify (risky / unclear / safe — editable rules) · delete · change action on account IP Access Rules, in bulk. Optionally manages paired Allow exception rules on an asset zone; **위험차단** deletes only the asset-zone Allow rules left on risky IPs while keeping the account rules |
+| **Change log** | Who / when / what, across domains, IP rules, OTP and settings — most recent 1,000 entries. Proxy · SSL changes can be reverted. Only changes made through the tool are recorded; dashboard changes don't appear in history but show up in status values on refresh |
+| **Settings** | Change the target IP, default group, cache TTL, asset zone, API-call budget and OTP issuer from the UI (owner only). The chip next to the title (e.g. v1.1.0) shows the tool version |
 | **Help** | Step-by-step install guide (in Korean) |
 
 UI
 - **Domain search** — the search box filters the list by name, and the filtered set becomes the work target (search → apply in one flow). The change log has its own text search (domain / content / person) and a type filter
-- **Per-domain toggles** — the cache rule / Tiered / Smart values are clickable: click the cell on desktop, or the buttons in the expanded row on mobile (confirm dialog, logged like bulk actions)
+- **Per-domain toggles** — the proxy cloud (☁) and the SSL badge are clickable per domain, and so are the cache rule / Tiered / Smart values: click the cell on desktop, or the buttons in the expanded row on mobile (confirm dialog, logged like bulk actions)
 - **Works on phones** — drawer menu (☰), two-line domain rows; on desktop the sidebar collapses to an icon rail with the bottom-left toggle
 - **Theme** — system / light / dark, switched with the bottom-left toggle and remembered per browser
 
 Safeguards
 - Records that do not point at the target IP (mail, other servers, …) are **protected** — the server refuses to change them even if selected in the UI
 - The current state is **re-read from Cloudflare right before applying** — safe even if someone changed things in the dashboard meanwhile
-- Calls are chunked to respect the Cloudflare API limit (1,200 requests / 5 min / user) and the Workers free-plan limit (50 subrequests / request)
+- Calls are chunked — 5 zones per request — to respect the Cloudflare API limit (1,200 requests / 5 min / user) and the Workers free-plan limit (50 subrequests / request)
 
 Login
 - Password + **per-user TOTP** (Google Authenticator or any RFC 6238 app). The first person to register becomes the owner — only the owner can add, disable or delete others (disabling kills that person's sessions immediately)
@@ -62,7 +62,7 @@ Cloudflare dashboard → profile (top right) → **My Profile → API Tokens →
 | Domains → `CF_API_TOKEN` | `Zone · Zone · Read` / `Zone · DNS · Edit` / `Zone · Zone Settings · Edit` / `Zone · Cache Rules · Edit`<br>Zone Resources: `Include · All zones from an account` |
 | IP Rules → `CF_IP_TOKEN` (optional) | `Account · Account Firewall Access Rules · Edit` / `Zone · Firewall Services · Edit` / `Zone · Zone · Read` |
 
-Leave Client IP Filtering empty (Workers egress IPs change).
+Leave Client IP Filtering empty (Workers egress IPs change). The token value is shown only once — copy it right away. Instead of a separate `CF_IP_TOKEN`, you can add the IP Rules permissions to the domain token.
 
 ### 2. Clone and create the config file
 
@@ -90,7 +90,7 @@ node setup.mjs --dry-run     # check only — validates values, tokens, login an
 node setup.mjs               # install
 ```
 
-The script handles wrangler login (browser) → KV creation → deploy (secrets included), then prints the URL and how to log in for the first time.
+The script handles wrangler login (browser) → KV creation → deploy (secrets included, `SESSION_SECRET` auto-generated), then prints the URL and how to log in for the first time. It writes its own `wrangler.setup.jsonc` and never touches an existing `wrangler.jsonc`.
 
 - Uploaded secrets are wiped from `setup.env` afterwards (`setup.env` is git-ignored)
 - If a Worker with the same name already exists in the account, the script stops instead of overwriting it
@@ -99,7 +99,7 @@ The script handles wrangler login (browser) → KV creation → deploy (secrets 
 ### 4. First login · register TOTP (do this right away)
 
 - Password = `PASSWORD_PREFIX` + `!` + today's day of month, two digits (**KST**). E.g. prefix `abc` on the 5th → `abc!05`
-- Log in and register TOTP under **2단계 인증** (two-factor auth) immediately. Until someone registers, anyone who knows the password can log in — and the date part is guessable, so pick a long prefix
+- Log in and register TOTP under **2단계 인증** (two-factor auth) immediately — Google Authenticator or any RFC 6238 app works. Until someone registers, anyone who knows the password can log in — and the date part is guessable, so pick a long prefix
 
 ## Update · uninstall
 
@@ -107,6 +107,8 @@ The script handles wrangler login (browser) → KV creation → deploy (secrets 
 git pull
 node setup.mjs               # re-run with the same setup.env to update (blank secrets are kept as-is)
 ```
+
+If you installed manually, update with `git pull` + `npx wrangler deploy` instead. Release notes are on the [Releases](https://github.com/real21c/cloudflare-admin-toolkit/releases) page; the chip next to the Settings screen title shows the version you are running.
 
 To change settings later, edit `setup.env` and re-run — or use the in-app **Settings** menu.
 
@@ -117,7 +119,7 @@ npx wrangler delete --config wrangler.setup.jsonc
 npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.jsonc   # the KV id is in .setup-state.json
 ```
 
-If you installed manually (without `setup.mjs`), run the same commands without `--config wrangler.setup.jsonc`, or delete the Worker and the KV namespace in the dashboard.
+If you installed manually (without `setup.mjs`), run the same commands without `--config wrangler.setup.jsonc`, or delete the Worker and the KV namespace in the dashboard. Afterwards, revoking the API tokens you created for this tool (dashboard **My Profile → API Tokens**) is recommended.
 
 ## Recovery
 
@@ -146,7 +148,7 @@ Everything fits in the free plan.
 ## Good to know
 
 - **The UI is Korean-only** and timestamps use KST
-- Do **not** attach a Worker route to a zone you manage with this tool — the moment you switch that zone to DNS only, the tool cuts itself off. Use the `workers.dev` URL or a Custom Domain
+- Do **not** attach a Worker route to a zone you manage with this tool — the moment you switch that zone to DNS only, the tool cuts itself off. Use the `workers.dev` URL or a Custom Domain (Worker → **Settings → Domains & Routes → Add → Custom domain** with a same-account domain; DNS and the certificate are created automatically)
 - **IP Rules** splits the rule notes into time / URL / user-agent columns when the notes follow the `time | URL | User-Agent` format; otherwise the whole note is shown in one column. The asset-zone pairing only activates when `IP_PAIR_ZONE_NAME` is set (only Allow rules whose notes contain `404 guard` are treated as pairs)
 - **The default IP classification rules assume an ASP/IIS origin** (e.g. requests for PHP extensions are classified as risky). On other stacks, adjust them under `⚙ 규칙` in the IP Rules screen
 - The cache rule finds itself by its description string `static-assets (cloudflare-admin-toolkit)` (`CACHE_RULE_DESC` in `src/core.js`). If you change it after rules were deployed, old rules will no longer be found
