@@ -73,11 +73,11 @@
     <ul>
       <li><b>API 토큰</b> — 관리할 도메인이 있는 계정에서 발급. 도구가 도메인·IP Rule을 바꿀 때 쓰는 열쇠</li>
       <li><b>Worker 1개</b> — 이 도구의 코드와 화면 (<code>src/</code>, <code>public/</code>)</li>
-      <li><b>KV 1개</b> — 그룹 · 상태 캐시 · 변경 이력 · OTP 목록 · IP 분류 규칙 · 설정 값을 저장</li>
+      <li><b>D1 데이터베이스 1개</b> — 그룹 · 상태 캐시 · 변경 이력 · OTP 목록 · IP 분류 규칙 · 설정 값을 저장. 테이블은 도구가 처음 쓸 때 만듭니다</li>
       <li><b>변수</b> — 대상 서버 IP 같은 보통 값. <code>wrangler.jsonc</code> 파일에 적는다</li>
       <li><b>시크릿</b> — 토큰 · 비밀번호처럼 숨길 값. 파일에 적지 않고 명령으로 넣는다</li>
     </ul>
-    <p>모두 <b>무료 요금제</b>로 됩니다 (Workers 하루 10만 요청, KV 쓰기 하루 1,000회).</p>
+    <p>모두 <b>무료 요금제</b>로 됩니다 (Workers 하루 10만 요청, D1 쓰기 하루 10만 행).</p>
   </div>
 
   <h2 id="quick">빠른 설치 — 명령 하나</h2>
@@ -102,7 +102,7 @@ node setup.mjs                <span class="c"># 설치 (다시 실행하면 업�
     <ul>
       <li>값 검사, 토큰 확인 (도메인이 몇 개 보이는지 · IP Rules 권한)</li>
       <li>wrangler 로그인이 안 돼 있으면 브라우저를 열어 로그인</li>
-      <li>KV 만들기 → 배포 (시크릿 함께, <code>SESSION_SECRET</code> 은 자동) → 주소와 첫 로그인 안내</li>
+      <li>D1 만들기 (Worker 와 같은 이름. 이미 있으면 그대로 사용) → 배포 (시크릿 함께, <code>SESSION_SECRET</code> 은 자동) → 주소와 첫 로그인 안내</li>
       <li>올린 시크릿은 <code>setup.env</code> 에서 지웁니다. 다시 실행할 때 비워 두면 이미 올린 값을 그대로 씁니다</li>
       <li>값을 고친 뒤 다시 실행하면 새로 만들지 않고 업데이트합니다</li>
     </ul>
@@ -115,7 +115,7 @@ node setup.mjs                <span class="c"># 설치 (다시 실행하면 업�
     <li><a href="#quick"><span class="no">⚡</span>빠른 설치 — 명령 하나</a></li>
     <li><a href="#s1"><span class="no">1</span>API 토큰 만들기</a></li>
     <li><a href="#s2"><span class="no">2</span>준비 · wrangler 로그인</a></li>
-    <li><a href="#s3"><span class="no">3</span>KV 만들기</a></li>
+    <li><a href="#s3"><span class="no">3</span>D1 만들기</a></li>
     <li><a href="#s4"><span class="no">4</span>wrangler.jsonc — 변수</a></li>
     <li><a href="#s5"><span class="no">5</span>배포</a></li>
     <li><a href="#s6"><span class="no">6</span>시크릿 넣기</a></li>
@@ -138,6 +138,7 @@ node setup.mjs                <span class="c"># 설치 (다시 실행하면 업�
     <tr><td></td><td><code>Zone · DNS · Edit</code></td><td>프록시 (Proxied ↔ DNS only)</td></tr>
     <tr><td></td><td><code>Zone · Zone Settings · Edit</code></td><td>SSL 모드 · Tiered Cache · Smart Tiered Cache</td></tr>
     <tr><td></td><td><code>Zone · Cache Rules · Edit</code></td><td>정적파일 캐시 규칙</td></tr>
+    <tr><td></td><td><code>Zone · Zone WAF · Edit</code></td><td>Security › Scan check (WAF 사용자 정의 규칙)</td></tr>
     <tr><td>Zone Resources</td><td><code>Include · All zones from an account · (그 계정)</code></td><td>새로 추가한 도메인도 자동으로 포함</td></tr>
     <tr><td>Client IP Filtering</td><td><b>비워 둠</b></td><td>Workers 는 나가는 IP 가 바뀌어서 걸면 안 됨</td></tr>
   </table></div>
@@ -163,15 +164,14 @@ npx wrangler whoami     <span class="c"># 로그인한 계정과 계정 ID 확�
   <p>Worker 를 둘 계정과 도메인이 있는 계정은 <b>달라도 됩니다</b>. 토큰만 도메인 계정에서 만들면 됩니다.</p>
 
   <!-- 3 -->
-  <h2 id="s3"><span class="no">3</span>KV 만들기</h2>
-  <div class="pre"><pre>npx wrangler kv namespace create BDM_KV</pre></div>
-  <p>출력에 나오는 <code>id</code> 를 다음 단계의 <code>kv_namespaces</code> 에 넣습니다.</p>
-  <div class="warn"><code>wrangler.jsonc</code> 의 KV id 자리에 <code>&lt;...&gt;</code> 같은 자리표시가 남아 있으면 이 명령이 <code>Authentication error 10000</code> 으로 실패합니다.
-    그럴 땐 <code>kv_namespaces</code> 블록을 잠시 지우고 만든 뒤 다시 넣습니다.</div>
+  <h2 id="s3"><span class="no">3</span>D1 만들기</h2>
+  <div class="pre"><pre>npx wrangler d1 create my-cf-admin      <span class="c"># 이름은 Worker 와 같게 하면 알아보기 쉽습니다</span></pre></div>
+  <p>출력에 나오는 <code>database_id</code> 를 다음 단계의 <code>d1_databases</code> 에 넣습니다. 대시보드(<b>Storage &amp; Databases → D1</b>)에서 만들어도 됩니다.
+    테이블은 만들지 않아도 됩니다 — 도구가 처음 쓸 때 만듭니다.</p>
 
   <!-- 4 -->
   <h2 id="s4"><span class="no">4</span>wrangler.jsonc — 변수</h2>
-  <p>소스 폴더의 <code>wrangler.jsonc</code> 에서 <b>이름 · 계정 ID · KV id · 변수</b>를 바꿉니다. 나머지는 그대로 둡니다.</p>
+  <p>소스 폴더의 <code>wrangler.jsonc</code> 에서 <b>이름 · 계정 ID · D1 · 변수</b>를 바꿉니다. 나머지는 그대로 둡니다.</p>
   <div class="pre"><pre>{
   "name": "my-cf-admin",                 <span class="c">// Worker 이름 → 주소 my-cf-admin.&lt;서브도메인&gt;.workers.dev</span>
   "account_id": "&lt;Worker 를 둘 계정 ID&gt;",  <span class="c">// 2단계 whoami 에서 본 값. 적어 두면 다른 계정에 잘못 배포되지 않음</span>
@@ -179,8 +179,8 @@ npx wrangler whoami     <span class="c"># 로그인한 계정과 계정 ID 확�
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
-  "kv_namespaces": [
-    { "binding": "BDM_KV", "id": "&lt;3단계에서 나온 id&gt;" }    <span class="c">// binding 이름은 BDM_KV 그대로</span>
+  "d1_databases": [
+    { "binding": "DB", "database_name": "my-cf-admin", "database_id": "&lt;3단계에서 나온 database_id&gt;" }   <span class="c">// binding 이름은 DB 그대로</span>
   ],
   "vars": {
     "SERVER_IP": "203.0.113.10",
@@ -197,7 +197,7 @@ npx wrangler whoami     <span class="c"># 로그인한 계정과 계정 ID 확�
   <div class="tscroll"><table class="tbl">
     <tr><th>이름</th><th>예</th><th>뜻</th><th>설정 메뉴</th></tr>
     <tr><td><code>SERVER_IP</code></td><td><code>203.0.113.10</code></td><td>DNS · SSL/TLS 일괄 변경 대상 서버 IP. 이 IP 를 가리키는 A/AAAA 레코드만 바뀌고 나머지는 보호</td><td class="yes">가능</td></tr>
-    <tr><td><code>DEFAULT_GROUP</code></td><td><code>중요고객</code></td><td>처음 열 때 보이는 그룹 탭. 그룹이 없으면 비워 둠</td><td class="yes">가능</td></tr>
+    <tr><td><code>DEFAULT_GROUP</code></td><td><code>쇼핑몰</code></td><td>처음 열 때 보이는 그룹 탭. 그룹이 없으면 비워 둠</td><td class="yes">가능</td></tr>
     <tr><td><code>CACHE_TTL_MINUTES</code></td><td><code>10</code></td><td>도메인 SSL · 프록시 상태를 다시 읽기 전까지 기억하는 시간(분)</td><td class="yes">가능</td></tr>
     <tr><td><code>CONCURRENCY</code></td><td><code>6</code></td><td>Cloudflare API 를 동시에 부르는 수</td><td>—</td></tr>
     <tr><td><code>MAX_ZONES_PER_CALL</code></td><td><code>5</code></td><td>변경 요청 한 번에 넣는 도메인 수. 무료 요금제는 요청 1건당 외부 호출 50회 제한이라 5 권장</td><td>—</td></tr>
@@ -205,13 +205,14 @@ npx wrangler whoami     <span class="c"># 로그인한 계정과 계정 ID 확�
     <tr><td><code>IP_PAIR_ZONE_NAME</code></td><td><code>example.com</code></td><td>404 가드가 IP 마다 Allow 예외 Rule을 만드는 자산존. 쓰지 않으면 비워 둠 → 계정 IP Rule만 관리</td><td class="yes">가능</td></tr>
     <tr><td><code>IP_RATE_BUDGET</code></td><td><code>900</code></td><td>IP Rules 화면이 5분 동안 쓰는 API 호출 상한. Cloudflare 한도 1,200회를 대시보드 등과 나눠 씀</td><td class="yes">가능</td></tr>
     <tr><td><code>IP_ACCOUNT_ID</code><br><code>IP_PAIR_ZONE_ID</code></td><td>(비움)</td><td>보통 적지 않음 — 토큰으로 자동으로 찾음. IP Rules 토큰이 여러 계정에 걸쳐 있을 때만 계정 ID 를 적음</td><td>—</td></tr>
+    <tr><td><code>CACHE_RULE_NAME</code></td><td>(비움)</td><td>정적파일 캐시 규칙 이름. 보통 비워 둠 → <code>static-assets (cloudflare-admin-toolkit)</code>. 다른 이름으로 이미 규칙을 걸어 둔 도메인이 있으면 그 이름을 적음 (바꾸면 기존 규칙을 못 찾고 하나 더 만듦)</td><td>—</td></tr>
   </table></div>
   <div class="warn">관리 대상 도메인에 <b>route</b> 를 걸지 마세요. 그 도메인을 DNS only 로 바꾸는 순간 이 도구도 끊깁니다. 주소는 <code>workers.dev</code> 나 Custom Domain(8단계)을 씁니다.</div>
 
   <!-- 5 -->
   <h2 id="s5"><span class="no">5</span>배포</h2>
   <div class="pre"><pre>npx wrangler deploy</pre></div>
-  <p>Worker 가 없으면 새로 만들어지고, <code>wrangler.jsonc</code> 의 변수 · KV 연결이 함께 들어갑니다.
+  <p>Worker 가 없으면 새로 만들어지고, <code>wrangler.jsonc</code> 의 변수 · D1 연결이 함께 들어갑니다.
     끝나면 주소 <code>https://&lt;이름&gt;.&lt;서브도메인&gt;.workers.dev</code> 가 나옵니다. 시크릿을 넣기 전에는 열어도 "시크릿이 설정되지 않았습니다" 가 보입니다.</p>
 
   <!-- 6 -->
@@ -260,10 +261,11 @@ npx wrangler secret bulk secrets.json</pre></div>
 
   <!-- 9 -->
   <h2 id="s9"><span class="no">9</span>코드 업데이트</h2>
+  <div class="warn"><b>v1.3.0 부터 저장소가 KV → D1 으로 바뀌었습니다.</b> 그 전 버전(KV)으로 설치한 Worker 를 새 버전으로 업데이트하면
+    기존 데이터(OTP · 변경 이력 · 그룹 · 설정)가 따라오지 않고 2단계 인증도 꺼집니다. 예전 설치는 예전 버전을 그대로 쓰거나, 새 이름으로 새로 설치하세요.</div>
   <div class="pre"><pre>npx wrangler deploy</pre></div>
   <ul>
-    <li>시크릿 · KV 데이터(그룹 · 이력 · OTP · 설정 메뉴에서 바꾼 값)는 그대로 남습니다</li>
-    <li><code>wrangler.jsonc</code> 의 변수는 파일 값으로 다시 들어갑니다. 설정 메뉴에서 바꾼 값은 그 위에 덮이므로 계속 유지됩니다</li>
+    <li>시크릿 · D1 데이터(그룹 · 이력 · OTP · 설정 메뉴에서 바꾼 값)는 그대로 남습니다</li>    <li><code>wrangler.jsonc</code> 의 변수는 파일 값으로 다시 들어갑니다. 설정 메뉴에서 바꾼 값은 그 위에 덮이므로 계속 유지됩니다</li>
     <li><b>Worker 이름은 대시보드에서 바꾸고</b> <code>wrangler.jsonc</code> 의 <code>name</code> 을 맞춥니다. 파일만 바꾸면 시크릿 없는 새 Worker 가 따로 생깁니다</li>
   </ul>
 

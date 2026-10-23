@@ -447,6 +447,7 @@
       <option value="tiered">Tiered Cache</option>
       <option value="smart">Smart</option>
       <option value="ip">IP Rule</option>
+      <option value="scan">Security (Scan check)</option>
       <option value="otp">2단계 인증</option>
       <option value="settings">설정</option>
       <option value="revert">되돌리기</option>
@@ -1389,6 +1390,7 @@ function logMatch(e, q, kind) {
     const a = String(e.action || '');
     if (kind === 'proxy') { if (a !== 'proxy' && a !== 'proxy-fail') return false; }
     else if (kind === 'ip' || kind === 'otp') { if (a.indexOf(kind + '-') !== 0) return false; }
+    else if (kind === 'scan') { if (a.indexOf('scan') !== 0) return false; }
     else if (a !== kind) return false;
   }
   if (q) {

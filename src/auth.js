@@ -88,7 +88,7 @@ export { safeEqual };
 // ── 로그인 화면 ────────────────────────────────────────────
 export function loginPage(message, otpOn) {
   return `<!doctype html>
-<html lang="ko"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cloudflare Admin Toolkit</title>
 <style>
@@ -117,11 +117,11 @@ export function loginPage(message, otpOn) {
     Cloudflare Admin Toolkit
   </div>
   ${message ? '<div class="err">' + message + '</div>' : ''}
-  <label for="p">비밀번호</label>
+  <label for="p">PASSWORD</label>
   <input id="p" name="password" type="password" autocomplete="current-password" autofocus>
-  ${otpOn ? `<label for="o" style="margin-top:14px">구글 OTP</label>
-  <input id="o" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6자리">` : ''}
-  <button type="submit">로그인</button>
+  ${otpOn ? `<label for="o" style="margin-top:14px">2FA CODE</label>
+  <input id="o" name="otp" autocomplete="one-time-code" maxlength="10" placeholder="6 digits, or a recovery code">` : ''}
+  <button type="submit">Sign in</button>
 </form>
 </body></html>`;
 }

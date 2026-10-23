@@ -29,9 +29,10 @@ This toolkit does that **per group, in one action**, with a **preview** of what 
 | Menu | What it does |
 |---|---|
 | **DNS · SSL/TLS** | Bulk-switch A/AAAA records pointing at your target server IP, per group, with the two headline actions **Proxied + Flexible** and **DNS only + Full** (preview → apply · revert). Bulk enable/disable a static-asset cache rule, Tiered Cache and Smart Tiered Cache. Zone groups |
+| **Security** | Apply · update · remove one WAF custom rule, **Scan check**, on every zone at once — blocks paths scanners probe (`.env`, `.git`, …) at the edge. Edit the expression at the top of the screen (owner only); each zone shows applied / needs update / none. Other rules in the zone are kept, order included |
 | **IP Rules** | Browse · search · classify (risky / unclear / safe — editable rules) · delete · change action on account IP Access Rules, in bulk. Optionally manages paired Allow exception rules on an asset zone; **위험차단** deletes only the asset-zone Allow rules left on risky IPs while keeping the account rules |
 | **Change log** | Who / when / what, across domains, IP rules, OTP and settings — most recent 1,000 entries. Proxy · SSL changes can be reverted. Only changes made through the tool are recorded; dashboard changes don't appear in history but show up in status values on refresh |
-| **Settings** | Change the target IP, default group, cache TTL, asset zone, API-call budget and OTP issuer from the UI (owner only). The chip next to the title (e.g. v1.1.0) shows the tool version |
+| **Settings** | Change the target IP, default group, cache TTL, asset zone, API-call budget and OTP issuer from the UI (owner only). The chip next to the title (e.g. v1.3.0) shows the tool version |
 | **Help** | Step-by-step install guide (in Korean) |
 
 UI
@@ -47,6 +48,7 @@ Safeguards
 
 Login
 - Password + **per-user TOTP** (Google Authenticator or any RFC 6238 app). The first person to register becomes the owner — only the owner can add, disable or delete others (disabling kills that person's sessions immediately)
+- **Recovery codes** — when you register TOTP, ten one-time codes are shown once. If your phone is unavailable, type one into the OTP field at login (each works once; only hashes are stored). Check how many are left or reissue them in the two-factor screen
 - 12-hour sessions. Brute force is limited: **10 failed logins per IP within 10 minutes** blocks that IP for a while, a used OTP code **cannot be reused** until it rotates, and the owner-verification code (add / rekey / disable-all) locks after **5 wrong tries in 10 minutes**
 
 ## Quick start — one command
@@ -59,7 +61,7 @@ Cloudflare dashboard → profile (top right) → **My Profile → API Tokens →
 
 | Token | Permissions |
 |---|---|
-| Domains → `CF_API_TOKEN` | `Zone · Zone · Read` / `Zone · DNS · Edit` / `Zone · Zone Settings · Edit` / `Zone · Cache Rules · Edit`<br>Zone Resources: `Include · All zones from an account` |
+| Domains → `CF_API_TOKEN` | `Zone · Zone · Read` / `Zone · DNS · Edit` / `Zone · Zone Settings · Edit` / `Zone · Cache Rules · Edit` / `Zone · Zone WAF · Edit` (Security)<br>Zone Resources: `Include · All zones from an account` |
 | IP Rules → `CF_IP_TOKEN` (optional) | `Account · Account Firewall Access Rules · Edit` / `Zone · Firewall Services · Edit` / `Zone · Zone · Read` |
 
 Leave Client IP Filtering empty (Workers egress IPs change). The token value is shown only once — copy it right away. Instead of a separate `CF_IP_TOKEN`, you can add the IP Rules permissions to the domain token.
@@ -90,7 +92,7 @@ node setup.mjs --dry-run     # check only — validates values, tokens, login an
 node setup.mjs               # install
 ```
 
-The script handles wrangler login (browser) → KV creation → deploy (secrets included, `SESSION_SECRET` auto-generated), then prints the URL and how to log in for the first time. It writes its own `wrangler.setup.jsonc` and never touches an existing `wrangler.jsonc`.
+The script handles wrangler login (browser) → D1 database creation (same name as the Worker; reused if it already exists, tables are created on first use) → deploy (secrets included, `SESSION_SECRET` auto-generated), then prints the URL and how to log in for the first time. It writes its own `wrangler.setup.jsonc` and never touches an existing `wrangler.jsonc`.
 
 - Uploaded secrets are wiped from `setup.env` afterwards (`setup.env` is git-ignored)
 - If a Worker with the same name already exists in the account, the script stops instead of overwriting it
@@ -102,6 +104,8 @@ The script handles wrangler login (browser) → KV creation → deploy (secrets 
 - Log in and register TOTP under **2단계 인증** (two-factor auth) immediately — Google Authenticator or any RFC 6238 app works. Until someone registers, anyone who knows the password can log in — and the date part is guessable, so pick a long prefix
 
 ## Update · uninstall
+
+> **Since v1.3.0 the storage is D1 instead of KV.** Updating a Worker installed with v1.1.0 (KV) does not carry over its data (TOTP · change log · groups · settings), and two-factor auth ends up switched off. Keep old installs on v1.1.0, or install fresh under a new `WORKER_NAME`.
 
 ```bash
 git pull
@@ -116,10 +120,10 @@ To uninstall:
 
 ```bash
 npx wrangler delete --config wrangler.setup.jsonc
-npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.jsonc   # the KV id is in .setup-state.json
+npx wrangler d1 delete <WORKER_NAME> --config wrangler.setup.jsonc   # the D1 name equals WORKER_NAME
 ```
 
-If you installed manually (without `setup.mjs`), run the same commands without `--config wrangler.setup.jsonc`, or delete the Worker and the KV namespace in the dashboard. Afterwards, revoking the API tokens you created for this tool (dashboard **My Profile → API Tokens**) is recommended.
+If you installed manually (without `setup.mjs`), run the same commands without `--config wrangler.setup.jsonc`, or delete the Worker and the D1 database in the dashboard. Afterwards, revoking the API tokens you created for this tool (dashboard **My Profile → API Tokens**) is recommended.
 
 ## Recovery
 
@@ -129,10 +133,10 @@ If you installed manually (without `setup.mjs`), run the same commands without `
 npx wrangler secret put PASSWORD_PREFIX --config wrangler.setup.jsonc   # drop --config … if you installed manually
 ```
 
-- **The owner's phone is lost** (no one can pass owner verification) — clear the OTP list; the tool falls back to password-only login, then register TOTP again right away:
+- **The owner's phone is lost** — log in with one of the **recovery codes** first. If there are none left, clear the OTP list; the tool falls back to password-only login, then register TOTP again right away:
 
 ```bash
-npx wrangler kv key delete otp:devices --binding BDM_KV --remote --config wrangler.setup.jsonc
+npx wrangler d1 execute DB --remote --command "DELETE FROM app_data WHERE key = 'otp:devices'" --config wrangler.setup.jsonc
 ```
 
 ## Cost and limits
@@ -142,7 +146,7 @@ Everything fits in the free plan.
 | Item | Free limit | This toolkit |
 |---|---|---|
 | Workers requests | 100k / day | 1 per page view / API call |
-| KV writes | 1,000 / day | changes, log entries, status cache |
+| D1 rows written | 100k / day | changes, log entries, status cache (a few thousand rows even on a day of repeated bulk changes across hundreds of zones) |
 | Cloudflare API | 1,200 / 5 min / user (no fee) | one status refresh ≈ zone count × 2; the IP Rules screen throttles itself to 900 / 5 min |
 
 ## Good to know
@@ -151,7 +155,8 @@ Everything fits in the free plan.
 - Do **not** attach a Worker route to a zone you manage with this tool — the moment you switch that zone to DNS only, the tool cuts itself off. Use the `workers.dev` URL or a Custom Domain (Worker → **Settings → Domains & Routes → Add → Custom domain** with a same-account domain; DNS and the certificate are created automatically)
 - **IP Rules** splits the rule notes into time / URL / user-agent columns when the notes follow the `time | URL | User-Agent` format; otherwise the whole note is shown in one column. The asset-zone pairing only activates when `IP_PAIR_ZONE_NAME` is set (only Allow rules whose notes contain `404 guard` are treated as pairs)
 - **The default IP classification rules assume an ASP/IIS origin** (e.g. requests for PHP extensions are classified as risky). On other stacks, adjust them under `⚙ 규칙` in the IP Rules screen
-- The cache rule finds itself by its description string `static-assets (cloudflare-admin-toolkit)` (`CACHE_RULE_DESC` in `src/core.js`). If you change it after rules were deployed, old rules will no longer be found
+- The cache rule finds itself by its description string `static-assets (cloudflare-admin-toolkit)`. If your zones already carry the rule under another name, put that name in `CACHE_RULE_NAME` in `setup.env`. Changing the name after rules were deployed means old rules will no longer be found
+- **Security (Scan check)** uses one WAF custom rule per zone (the free plan allows 5 per zone) and only applies to proxied (orange-cloud) traffic
 - Switching a record to `DNS only` bypasses cache, WAF and Workers routes and exposes the origin IP. `Flexible` causes a redirect loop if the origin forces HTTPS
 - `···` in the cache rule / Tiered / Smart columns means "not read yet" — press **설정 다시 읽기** (re-read settings) in the top bar; if it stays, the token lacks the `Zone Settings` / `Cache Rules` permissions
 - If the Cloudflare API rate limit is hit mid-batch, the tool stops and tells you — just continue a moment later
@@ -178,7 +183,9 @@ src/api.js           API (shared by local and Workers)
 src/core.js          Cloudflare API calls · scope calculation · cache rule
 src/ip-api.js        IP Rules API
 src/settings.js      settings schema · validation
-public/              UI (index · ip · settings · help)
+src/store-d1.js      D1 storage (app_data · zone_state · change_log)
+src/otp.js           per-user TOTP · recovery codes
+public/              UI (index · security · ip · settings · help)
 ```
 
 Zero dependencies (the bundled QR generator `src/vendor/qrcode.mjs` is MIT-licensed).

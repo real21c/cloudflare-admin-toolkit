@@ -1,7 +1,7 @@
 // Cloudflare Workers 엔트리
 //
 //   - 정적 파일은 Workers Assets(env.ASSETS)로 서빙
-//   - 저장소는 KV
+//   - 저장소는 D1(DB 바인딩)
 //   - 모든 요청은 비밀번호 로그인 뒤에만 통과 (구글 OTP 를 등록했으면 OTP 도)
 //
 // 필요한 시크릿:
@@ -13,19 +13,25 @@
 
 import { createApi } from './api.js';
 import { createStore } from './store-kv.js';
+import { createD1Kv, createD1Data } from './store-d1.js';
 import {
   expectedPassword, makeSession, parseSession,
   readCookie, sessionCookie, clearCookie, COOKIE_NAME, safeEqual, loginPage,
 } from './auth.js';
 import { newSecret, verifyCode, otpauthUri, qrSvg } from './totp.js';
 import {
-  loadDevices, saveDevices, putUse, getUse, newId, cleanName, stepUp, matchLogin, publicList, countFail, failCount,
+  loadDevices, saveDevices, putUse, getUse, newId, cleanName, stepUp, matchLogin, matchBackup,
+  newBackupCodes, saveBackupCodes, publicList, countFail, failCount,
 } from './otp.js';
-import { nowStamp, monthKey } from './core.js';
+import { nowStamp } from './core.js';
 import { loadSettings, applySettings, pickDefaults } from './settings.js';
 
 // 구글 OTP 앱에 표시되는 이름 (wrangler.jsonc 의 OTP_ISSUER)
 const DEFAULT_OTP_ISSUER = 'CF Admin';
+
+// 저장소 — D1(DB). kv 는 KV 모양(get · put · delete · list)이라 OTP · 로그인 코드가 키 · 값으로 쓴다
+const kvOf = (env) => createD1Kv(env.DB);
+const dataOf = (env) => createD1Data(env.DB);
 
 const json = (status, body, extra) =>
   new Response(JSON.stringify(body), {
@@ -68,7 +74,7 @@ const cookieFor = async (env, epoch, dev) =>
 //   OTP 가 하나도 없으면 비밀번호 세션('-')만 통과
 //   OTP 가 있으면 그 사람이 목록에 있고 · 사용 중이고 · gen 이 같아야 통과 (사용중지하면 바로 끊김)
 async function sessionOf(request, env) {
-  const kv = env.BDM_KV;
+  const kv = kvOf(env);
   const s = await parseSession(env.SESSION_SECRET, readCookie(request, COOKIE_NAME));
   if (!s) return null;
   if (s.epoch !== (await epochGet(kv))) return null;
@@ -87,18 +93,18 @@ const OTP_FAIL = {
 const STALE = '목록이 바뀌었습니다. 새로고침한 뒤 다시 하세요.';
 
 // OTP 관리 기록을 변경 이력에 남긴다 (도메인 칸 = '2단계 인증', by = 누가 했는지).
-// 이력 쓰기가 실패해도(KV 쓰기 제한 등) OTP 작업은 실패시키지 않는다.
+// 이력 쓰기가 실패해도(저장소 쓰기 제한 등) OTP 작업은 실패시키지 않는다.
 async function otpLog(env, action, label, by) {
   try {
     const entry = { id: Math.random().toString(36).slice(2, 10), ts: nowStamp(), zone: '2단계 인증', zoneId: '', action, label };
     if (by) entry.by = by;
-    await createStore(env.BDM_KV).update('log:' + monthKey(), [], (cur) => (cur || []).concat([entry]));
+    await dataOf(env).appendLog([entry]);
   } catch (e) { /* 무시 */ }
 }
 
 // 대시보드에서 호출하는 OTP 관리 (로그인된 상태에서만 온다)
 async function handleOtp(request, env, path, url, sess) {
-  const kv = env.BDM_KV;
+  const kv = kvOf(env);
   const { dev: me } = sess;
   let list = sess.list;
   const isOwner = !list.length || !!(me && me.owner);
@@ -168,10 +174,12 @@ async function handleOtp(request, env, path, url, sess) {
       const dev = { id: newId(), name: pending.name, secret: pending.secret, since: now, enabled: true, owner: true, gen: 0 };
       await saveDevices(kv, [dev]);
       await putUse(kv, dev.id, { counter: c, at: null });
+      const codes = newBackupCodes();
+      await saveBackupCodes(kv, dev.id, codes);
       await kv.delete('otp:last'); // 예전 방식(한 명) 흔적
       const epoch = await epochBump(kv); // 비밀번호만으로 들어와 있던 세션 전부 끊기. 지금 창은 이어간다
-      await otpLog(env, 'otp-first', 'OTP 등록 — ' + dev.name + ' (관리자) · 2단계 인증 켜짐', dev.name);
-      return json(200, { ok: true, name: dev.name }, { 'Set-Cookie': await cookieFor(env, epoch, dev) });
+      await otpLog(env, 'otp-first', 'OTP 등록 — ' + dev.name + ' (관리자) · 2단계 인증 켜짐 · 복구 코드 10개 발급', dev.name);
+      return json(200, { ok: true, name: dev.name, codes }, { 'Set-Cookie': await cookieFor(env, epoch, dev) });
     }
 
     if (pending.mode === 'add') {
@@ -179,8 +187,10 @@ async function handleOtp(request, env, path, url, sess) {
       list = list.concat([dev]);
       await saveDevices(kv, list);
       await putUse(kv, dev.id, { counter: c, at: null });
-      await otpLog(env, 'otp-add', 'OTP 추가 — ' + dev.name, me.name);
-      return json(200, { ok: true, name: dev.name });
+      const codes = newBackupCodes();
+      await saveBackupCodes(kv, dev.id, codes);
+      await otpLog(env, 'otp-add', 'OTP 추가 — ' + dev.name + ' · 복구 코드 10개 발급', me.name);
+      return json(200, { ok: true, name: dev.name, codes });
     }
 
     // rekey — 관리자의 예전 휴대폰으로 로그인해 둔 다른 창은 끊고, 지금 창은 이어간다
@@ -192,8 +202,10 @@ async function handleOtp(request, env, path, url, sess) {
     await saveDevices(kv, list);
     const use = await getUse(kv, owner.id);
     await putUse(kv, owner.id, { counter: c, at: use.at });
-    await otpLog(env, 'otp-rekey', 'OTP 휴대폰 변경 — ' + owner.name, owner.name);
-    return json(200, { ok: true, name: owner.name }, { 'Set-Cookie': await cookieFor(env, await epochGet(kv), owner) });
+    const codes = newBackupCodes(); // 복구 코드도 전부 새로 (예전 코드 무효)
+    await saveBackupCodes(kv, owner.id, codes);
+    await otpLog(env, 'otp-rekey', 'OTP 휴대폰 변경 — ' + owner.name + ' · 복구 코드 재발급', owner.name);
+    return json(200, { ok: true, name: owner.name, codes }, { 'Set-Cookie': await cookieFor(env, await epochGet(kv), owner) });
   }
 
   // 한 사람 관리 — 이름 변경 · 사용중지 · 다시 사용 · 삭제
@@ -217,8 +229,7 @@ async function handleOtp(request, env, path, url, sess) {
         label = 'OTP 사용중지 — ' + before;
       } else {
         list = list.filter((d) => d.id !== target.id);
-        await kv.delete('otp:use:' + target.id);
-        await kv.delete('otp:fail:' + target.id);
+        await kv.deleteMany(['otp:use:', 'otp:fail:', 'otp:codes:'].map((p) => p + target.id));
         label = 'OTP 삭제 — ' + before;
       }
     } else if (act === 'enable') {
@@ -239,11 +250,21 @@ async function handleOtp(request, env, path, url, sess) {
     const r = await stepUp(kv, me, body.code);
     if (r !== 'ok') return json(r === 'locked' ? 429 : 400, { error: OTP_FAIL[r] });
     await saveDevices(kv, []);
-    for (const d of list) { await kv.delete('otp:use:' + d.id); await kv.delete('otp:fail:' + d.id); }
-    await kv.delete('otp:pending');
+    await kv.deleteMany([...list.flatMap((d) => ['otp:use:', 'otp:fail:', 'otp:codes:'].map((p) => p + d.id)), 'otp:pending']);
     const epoch = await epochBump(kv);
     await otpLog(env, 'otp-off', '2단계 인증 전체 해제 — ' + list.length + '명 OTP 삭제 · 비밀번호만으로 로그인', me.name);
     return json(200, { ok: true }, { 'Set-Cookie': await cookieFor(env, epoch, null) });
+  }
+
+  // 복구 코드 재발급 — 본인만, 지금 폰의 OTP 로 확인. 기존 코드는 전부 무효
+  if (path === '/auth/otp/codes' && request.method === 'POST') {
+    if (!me) return json(403, { error: 'OTP 로 로그인한 사람만 재발급할 수 있습니다.' });
+    const r = await stepUp(kv, me, body.code);
+    if (r !== 'ok') return json(r === 'locked' ? 429 : 400, { error: OTP_FAIL[r] });
+    const codes = newBackupCodes();
+    await saveBackupCodes(kv, me.id, codes);
+    await otpLog(env, 'otp-codes', '복구 코드 재발급 — ' + me.name, me.name);
+    return json(200, { ok: true, name: me.name, codes });
   }
 
   return json(404, { error: 'NOT_FOUND' });
@@ -254,11 +275,14 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const ip = request.headers.get('cf-connecting-ip') || 'unknown';
-    const kv = env.BDM_KV;
 
     if (!env.PASSWORD_PREFIX || !env.SESSION_SECRET) {
       return html(500, '<p>PASSWORD_PREFIX / SESSION_SECRET 시크릿이 설정되지 않았습니다.</p>');
     }
+    if (!env.DB) {
+      return html(500, '<p>D1 바인딩(DB)이 없습니다. wrangler.jsonc 의 d1_databases 를 확인하세요.</p>');
+    }
+    const kv = kvOf(env);
 
     // ── 로그인 ────────────────────────────────────────────
     if (path === '/login') {
@@ -267,20 +291,30 @@ export default {
       if (request.method === 'GET') return html(200, loginPage('', otpOn));
 
       if (await loginBlocked(kv, ip)) {
-        return html(429, loginPage('여러 번 틀려서 잠시 막혔습니다. 10분 뒤에 다시 하세요.', otpOn));
+        return html(429, loginPage('Too many failed attempts. Try again in 10 minutes.', otpOn));
       }
 
       const form = await request.formData();
       const given = String(form.get('password') || '');
       const want = expectedPassword(env.PASSWORD_PREFIX);
 
-      // 어느 쪽이 틀렸는지는 알려주지 않는다. OTP 는 비밀번호가 맞을 때만 확인한다
+      // 어느 쪽이 틀렸는지는 알려주지 않는다. OTP 는 비밀번호가 맞을 때만 확인한다.
+      // 6자리 숫자면 OTP, 아니면 복구 코드(일회용)로 판정
       const passOk = safeEqual(given, want);
       let dev = null;
-      if (passOk && otpOn) dev = (await matchLogin(kv, list, form.get('otp'), nowStamp())).device;
+      if (passOk && otpOn) {
+        const raw = String(form.get('otp') || '').trim();
+        if (/^\d{6}$/.test(raw)) {
+          dev = (await matchLogin(kv, list, raw, nowStamp())).device;
+        } else {
+          const m = await matchBackup(kv, list, raw, nowStamp());
+          dev = m.device;
+          if (dev) await otpLog(env, 'otp-backup', '복구 코드 사용 — ' + dev.name + ' (남은 ' + m.left + '개)', dev.name);
+        }
+      }
       if (!passOk || (otpOn && !dev)) {
         await loginFailed(kv, ip);
-        return html(401, loginPage(otpOn ? '비밀번호 또는 OTP 가 맞지 않습니다. (같은 OTP 는 한 번만 쓸 수 있습니다)' : '비밀번호가 맞지 않습니다.', otpOn));
+        return html(401, loginPage(otpOn ? 'Incorrect password or 2FA code. Each code works only once.' : 'Incorrect password.', otpOn));
       }
 
       await kv.delete('try:' + ip);
@@ -330,6 +364,8 @@ export default {
         ipPairZoneName: env.IP_PAIR_ZONE_NAME || '',
         ipRateBudget: Number(env.IP_RATE_BUDGET || 900),
         otpIssuer: env.OTP_ISSUER || DEFAULT_OTP_ISSUER,
+        // 정적파일 캐시 규칙 이름 — 비우면 기본 이름. 예전 이름으로 규칙을 걸어 둔 곳은 그 이름
+        cacheRuleName: env.CACHE_RULE_NAME || '',
       };
       // 설정 메뉴에서 바꾼 값을 기본값(wrangler.jsonc) 위에 덮는다. 설정을 바꿀 수 있는 사람 = OTP 관리자 (OTP 가 없으면 로그인한 사람)
       const config = Object.assign(applySettings(base, await loadSettings(store)), {
@@ -337,7 +373,7 @@ export default {
         canAdmin: !sess.list.length || !!(sess.dev && sess.dev.owner),
       });
 
-      const handle = createApi({ store, config });
+      const handle = createApi({ store, config, data: dataOf(env) });
 
       // POST 뿐 아니라 PUT(분류 규칙 저장) 등도 본문을 읽는다
       let body = {};

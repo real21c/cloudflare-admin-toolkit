@@ -1,6 +1,6 @@
 // 파일 기반 저장소 (로컬 실행용)
 //
-// 나중에 Workers로 올릴 때는 이 파일만 KV 버전으로 갈아끼우면 된다.
+// Workers 는 같은 모양의 D1 버전(store-kv.js + store-d1.js)을 쓴다.
 // 인터페이스: get(key) / put(key, value) / keys(prefix)
 //
 // 저장 위치: data/<key>.json

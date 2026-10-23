@@ -27,9 +27,10 @@
 | 메뉴 | 하는 일 |
 |---|---|
 | **DNS · SSL/TLS** | 대상 서버 IP 를 가리키는 A/AAAA 레코드를 그룹 단위로 일괄 전환 — 대표 버튼 **Proxied + Flexible** / **DNS only + Full** (미리보기 → 적용 · 되돌리기). 정적파일 캐시 규칙 · Tiered Cache · Smart Tiered Cache 일괄 켜기/끄기. 도메인 그룹 관리 |
+| **Security** | WAF 사용자 정의 규칙 **Scan check** 를 모든 도메인에 한 번에 적용 · 업데이트 · 제거. `.env` · `.git` 처럼 스캐너가 노리는 경로를 엣지에서 막습니다. 조건식은 화면 맨 위에서 고치고(관리자만), 도메인마다 적용됨 / 업데이트 필요 / 없음을 보여 줍니다. 그 도메인의 다른 규칙은 순서까지 그대로 둡니다 |
 | **IP Rules** | 계정 IP Access Rules 조회 · 검색 · 분류(위험 / 애매 / 안전 — 규칙 편집 가능) · 삭제 · Action 변경. 자산존 Allow 예외 Rule을 짝으로 함께 관리(선택), **위험차단**은 위험 IP 에 남은 자산존 Allow Rule만 삭제(계정 Rule은 유지) |
 | **변경 이력** | 누가 · 언제 · 무엇을 바꿨는지 (도메인 · IP Rule · OTP · 설정 모두) — 최근 1,000건. 프록시 · SSL 은 되돌리기 가능. 이 도구를 거친 변경만 기록되고, 대시보드에서 직접 바꾼 건 이력엔 없지만 상태 값에는 새로고침 때 반영됨 |
-| **설정** | 대상 IP · 기본 그룹 · 캐시 시간 · 자산존 · 호출 상한 · OTP 앱 이름을 화면에서 변경 (관리자만). 제목 옆 칩(예: v1.1.0)이 도구 버전 |
+| **설정** | 대상 IP · 기본 그룹 · 캐시 시간 · 자산존 · 호출 상한 · OTP 앱 이름을 화면에서 변경 (관리자만). 제목 옆 칩(예: v1.3.0)이 도구 버전 |
 | **도움말** | 새 Cloudflare 계정에 설치하는 방법 (단계별) |
 
 화면
@@ -45,6 +46,7 @@
 
 로그인
 - 비밀번호 + **사람별 OTP** (구글 OTP 등 RFC 6238 앱 아무거나). 처음 등록한 사람이 관리자 — 다른 사람 추가 · 사용중지 · 삭제 (사용중지하면 그 사람 창도 즉시 끊김)
+- **복구 코드** — OTP 를 등록할 때 일회용 코드 10개를 한 번 보여 줍니다. 휴대폰을 못 쓸 때 로그인의 OTP 칸에 대신 넣습니다 (각각 한 번씩, 저장소에는 해시만 남음). 2단계 인증 화면에서 남은 개수 확인 · 재발급
 - 세션 12시간. 무차별 대입 방어: **IP 당 10분에 10번** 틀리면 잠시 막히고, 한 번 쓴 OTP 코드는 **다음 코드로 바뀔 때까지 재사용 불가**, 관리자 확인 코드(추가 · 휴대폰 변경 · 전체 해제)는 **10분에 5번** 틀리면 잠깁니다
 
 ## 빠른 시작 — 명령 하나로 설치
@@ -57,7 +59,7 @@ Cloudflare 대시보드 → 오른쪽 위 프로필 → **My Profile → API Tok
 
 | 토큰 | 권한 |
 |---|---|
-| 도메인 → `CF_API_TOKEN` | `Zone · Zone · Read` / `Zone · DNS · Edit` / `Zone · Zone Settings · Edit` / `Zone · Cache Rules · Edit`<br>Zone Resources: `Include · All zones from an account` |
+| 도메인 → `CF_API_TOKEN` | `Zone · Zone · Read` / `Zone · DNS · Edit` / `Zone · Zone Settings · Edit` / `Zone · Cache Rules · Edit` / `Zone · Zone WAF · Edit` (Security)<br>Zone Resources: `Include · All zones from an account` |
 | IP Rules → `CF_IP_TOKEN` (선택) | `Account · Account Firewall Access Rules · Edit` / `Zone · Firewall Services · Edit` / `Zone · Zone · Read` |
 
 Client IP Filtering 은 비워 두세요 (Workers 는 나가는 IP 가 바뀝니다). 토큰 값은 만들 때 한 번만 보이니 바로 복사해 두세요. `CF_IP_TOKEN` 을 따로 만들지 않고 도메인 토큰에 IP Rules 권한을 추가해도 됩니다.
@@ -88,7 +90,7 @@ node setup.mjs --dry-run     # 먼저 확인만 — 값 · 토큰 · 로그인 �
 node setup.mjs               # 설치
 ```
 
-스크립트가 wrangler 로그인(브라우저) → KV 만들기 → 배포(시크릿 함께, `SESSION_SECRET` 은 자동 생성) 까지 하고, 주소와 첫 로그인 방법을 알려 줍니다. 설치용 `wrangler.setup.jsonc` 를 따로 만들고 기존 `wrangler.jsonc` 는 건드리지 않습니다.
+스크립트가 wrangler 로그인(브라우저) → D1 데이터베이스 만들기(Worker 와 같은 이름. 이미 있으면 그대로 사용, 테이블은 도구가 처음 쓸 때 만듦) → 배포(시크릿 함께, `SESSION_SECRET` 은 자동 생성) 까지 하고, 주소와 첫 로그인 방법을 알려 줍니다. 설치용 `wrangler.setup.jsonc` 를 따로 만들고 기존 `wrangler.jsonc` 는 건드리지 않습니다.
 
 - 올린 토큰 · 비밀번호는 `setup.env` 에서 자동으로 지웁니다 (`setup.env` 는 git 에 올라가지 않습니다)
 - 계정에 이미 같은 이름의 Worker 가 있으면 덮어쓰지 않고 멈춥니다
@@ -100,6 +102,8 @@ node setup.mjs               # 설치
 - 로그인하자마자 위쪽 **2단계 인증**에서 OTP 를 등록하세요 — 구글 OTP 등 RFC 6238 앱이면 됩니다. 등록 전에는 비밀번호만 알면 누구나 들어올 수 있고, 날짜 부분은 추측할 수 있으니 접두어는 길게 정하세요
 
 ## 업데이트 · 삭제
+
+> **v1.3.0 부터 저장소가 KV → D1 으로 바뀌었습니다.** v1.1.0(KV)으로 설치한 Worker 를 그대로 업데이트하면 기존 데이터(OTP · 변경 이력 · 그룹 · 설정)가 따라오지 않고 2단계 인증도 꺼집니다. 예전 설치는 v1.1.0 을 그대로 쓰거나, 새 `WORKER_NAME` 으로 새로 설치하세요.
 
 ```bash
 git pull
@@ -114,10 +118,10 @@ node setup.mjs               # 같은 setup.env 로 다시 실행하면 업데�
 
 ```bash
 npx wrangler delete --config wrangler.setup.jsonc
-npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.jsonc   # KV id 는 .setup-state.json 에 있음
+npx wrangler d1 delete <WORKER_NAME> --config wrangler.setup.jsonc   # D1 이름 = WORKER_NAME
 ```
 
-수동으로 설치했다면(`setup.mjs` 를 안 썼다면) 같은 명령을 `--config wrangler.setup.jsonc` 없이 실행하거나, 대시보드에서 Worker 와 KV 네임스페이스를 삭제하면 됩니다. 삭제 후에는 이 도구용으로 만든 API 토큰도 대시보드 **My Profile → API Tokens** 에서 삭제(Revoke)하는 것을 권장합니다.
+수동으로 설치했다면(`setup.mjs` 를 안 썼다면) 같은 명령을 `--config wrangler.setup.jsonc` 없이 실행하거나, 대시보드에서 Worker 와 D1 데이터베이스를 삭제하면 됩니다. 삭제 후에는 이 도구용으로 만든 API 토큰도 대시보드 **My Profile → API Tokens** 에서 삭제(Revoke)하는 것을 권장합니다.
 
 ## 복구
 
@@ -127,10 +131,10 @@ npx wrangler kv namespace delete --namespace-id <KV id> --config wrangler.setup.
 npx wrangler secret put PASSWORD_PREFIX --config wrangler.setup.jsonc   # 수동 설치면 --config … 는 뺍니다
 ```
 
-- **관리자 휴대폰을 잃어버렸을 때** (관리자 확인 코드를 아무도 못 넣을 때) — OTP 목록을 지우면 비밀번호만으로 로그인하는 상태로 돌아갑니다. 로그인 후 바로 2단계 인증을 다시 등록하세요:
+- **관리자 휴대폰을 잃어버렸을 때** — 먼저 OTP 등록 때 받은 **복구 코드**로 로그인하세요. 복구 코드도 없다면 OTP 목록을 지우면 비밀번호만으로 로그인하는 상태로 돌아갑니다. 로그인 후 바로 2단계 인증을 다시 등록하세요:
 
 ```bash
-npx wrangler kv key delete otp:devices --binding BDM_KV --remote --config wrangler.setup.jsonc
+npx wrangler d1 execute DB --remote --command "DELETE FROM app_data WHERE key = 'otp:devices'" --config wrangler.setup.jsonc
 ```
 
 ## 비용과 한도
@@ -140,7 +144,7 @@ npx wrangler kv key delete otp:devices --binding BDM_KV --remote --config wrangl
 | 항목 | 무료 한도 | 이 도구 |
 |---|---|---|
 | Workers 요청 | 하루 10만 | 화면 이동 · API 호출마다 1건 |
-| KV 쓰기 | 하루 1,000 | 변경 · 이력 · 상태 캐시 저장 |
+| D1 쓰기 | 하루 10만 행 | 변경 · 이력 · 상태 캐시 저장 (도메인 수백 개를 하루에 여러 번 일괄 변경해도 수천 행 수준) |
 | Cloudflare API | 사용자당 5분 1,200회 (요금 없음) | 도메인 상태 조회 1회 ≈ 도메인 수 × 2. IP Rules 화면은 5분 900회 아래로 스스로 늦춤 |
 
 ## 알아 둘 점
@@ -149,7 +153,8 @@ npx wrangler kv key delete otp:devices --binding BDM_KV --remote --config wrangl
 - 관리 대상 도메인에 Worker **route 를 걸지 마세요**. 그 도메인을 DNS only 로 바꾸는 순간 도구도 끊깁니다. `workers.dev` 주소나 Custom Domain 을 쓰세요 (Worker → **Settings → Domains & Routes → Add → Custom domain**, 같은 계정의 도메인이면 DNS 와 인증서가 자동으로 만들어집니다)
 - **IP Rules** 는 Rule 메모가 `추가시간 | URL | User-Agent` 형식이면 칸을 나눠 보여 주고, 아니면 메모 전체를 한 칸에 보여 줍니다. 자산존 짝 기능은 `IP_PAIR_ZONE_NAME` 을 정했을 때만 동작합니다 (메모에 `404 guard` 가 들어간 Allow Rule만 짝으로 봄)
 - **기본 분류 규칙은 ASP/IIS 서버 기준**입니다 (예: PHP 확장자 요청을 `위험`으로 분류). 다른 서버라면 IP Rules 의 `⚙ 규칙` 에서 맞게 고치세요
-- 캐시 규칙은 설명 `static-assets (cloudflare-admin-toolkit)` 으로 자기 규칙을 찾습니다. 규칙을 건 뒤에 `src/core.js` 의 `CACHE_RULE_DESC` 를 바꾸면 예전 규칙을 못 찾습니다
+- 캐시 규칙은 설명 `static-assets (cloudflare-admin-toolkit)` 으로 자기 규칙을 찾습니다. 다른 이름으로 이미 규칙을 걸어 둔 도메인이 있으면 `setup.env` 의 `CACHE_RULE_NAME` 에 그 이름을 적으세요. 규칙을 건 뒤에 이름을 바꾸면 예전 규칙을 못 찾습니다
+- **Security(Scan check)** 는 도메인마다 WAF 사용자 정의 규칙 하나를 씁니다 (무료 요금제는 도메인당 5개까지). 프록시(주황 구름)를 거치는 요청에만 적용됩니다
 - `DNS only` 로 바꾸면 그 레코드는 캐시 · WAF · Workers route 가 모두 빠지고 원서버 IP 가 드러납니다. `Flexible` 은 원서버가 HTTPS 로 리다이렉트하면 무한 리다이렉트가 납니다
 - 캐시규칙 · Tiered · Smart 칸의 `···` 는 "아직 못 읽음"입니다 — 상단 **설정 다시 읽기**를 눌러 보고, 그대로면 토큰에 `Zone Settings` / `Cache Rules` 권한이 있는지 확인하세요
 - 작업 중 Cloudflare API 한도에 걸리면 도구가 멈추고 알려 줍니다 — 잠시 뒤 이어서 하면 됩니다
@@ -176,7 +181,9 @@ src/api.js           API (로컬 · Workers 공용)
 src/core.js          Cloudflare API 호출 · 범위 계산 · 캐시 규칙
 src/ip-api.js        IP Rules API
 src/settings.js      설정 항목 · 값 검사
-public/              화면 (index · ip · settings · help)
+src/store-d1.js      D1 저장소 (app_data · zone_state · change_log)
+src/otp.js           사람별 OTP · 복구 코드
+public/              화면 (index · security · ip · settings · help)
 ```
 
 의존성은 없습니다 (QR 코드 생성기 `src/vendor/qrcode.mjs` 는 MIT 라이선스로 포함).

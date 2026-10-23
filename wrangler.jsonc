@@ -24,9 +24,9 @@
     "run_worker_first": true
   },
 
-  // KV — npx wrangler kv namespace create BDM_KV 로 만든 id 를 넣고 주석을 푼다
-  // "kv_namespaces": [
-  //   { "binding": "BDM_KV", "id": "" }
+  // D1 — npx wrangler d1 create <이름> 으로 만든 database_id 를 넣고 주석을 푼다 (테이블은 도구가 처음 쓸 때 만든다)
+  // "d1_databases": [
+  //   { "binding": "DB", "database_name": "", "database_id": "" }
   // ],
 
   "vars": {
@@ -45,6 +45,8 @@
     "IP_PAIR_ZONE_NAME": "",
     // IP Rules 화면이 5분 동안 쓸 Cloudflare API 호출 상한 (한도 1,200회를 대시보드 등과 나눠 씀)
     "IP_RATE_BUDGET": "900"
+    // 정적파일 캐시 규칙 이름 — 보통 적지 않음. 다른 이름으로 규칙을 이미 걸어 둔 경우만
+    // "CACHE_RULE_NAME": ""
   }
 
   // 시크릿은 파일에 두지 않는다. npx wrangler secret put <이름> 으로 등록한다.

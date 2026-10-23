@@ -2,11 +2,13 @@
 //
 //   node setup.mjs --init       setup.env 만들기 (빈 칸 샘플 = public/setup.example.env)
 //   node setup.mjs --dry-run    값 · 토큰 · 로그인 확인과 빌드 검사만 (아무것도 만들지 않음)
-//   node setup.mjs              setup.env 대로 KV 만들기 → 배포(시크릿 함께)
+//   node setup.mjs              setup.env 대로 D1 만들기(같은 이름이 있으면 그대로) → 배포(시크릿 함께)
+//     --force       같은 이름의 Worker 가 이미 있어도 덮어쓴다 (이 도구를 설치한 Worker 를 업데이트할 때)
+//     --share-d1    같은 이름의 D1 에 다른 테이블이 있어도 같이 쓴다
 //
-// - 소스 폴더의 wrangler.jsonc 는 건드리지 않는다.
+// - 소스 폴더의 wrangler.jsonc(운영 중인 Worker)는 건드리지 않는다.
 //   설치용 설정은 wrangler.setup.jsonc 에 따로 만들고 --config 로 배포한다.
-// - 계정 ID 를 적어 둔 wrangler.jsonc 의 Worker 이름이나, 이 스크립트가 만들지 않은 기존 Worker 이름이면 멈춘다.
+// - wrangler.jsonc 의 Worker 이름이나, 이 스크립트가 만들지 않은 기존 Worker 이름이면 멈춘다.
 // - setup.env 의 시크릿은 올린 뒤 파일에서 지운다. 다시 실행할 때 비워 두면 이미 올린 값을 쓴다.
 // - 의존성 0. Node 18 이상 + npx(wrangler).
 
@@ -17,6 +19,7 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { validateField } from './src/settings.js';
+import { TABLES } from './src/store-d1.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -30,7 +33,7 @@ const MAIN_CONFIG = join(ROOT, 'wrangler.jsonc');
 const DRY = has('--dry-run');
 const SECRET_KEYS = ['CF_API_TOKEN', 'CF_IP_TOKEN', 'PASSWORD_PREFIX'];
 const KNOWN = ['WORKER_NAME', 'ACCOUNT_ID', 'CUSTOM_DOMAIN', ...SECRET_KEYS, 'SERVER_IP', 'DEFAULT_GROUP', 'IP_PAIR_ZONE_NAME',
-  'OTP_ISSUER', 'CACHE_TTL_MINUTES', 'IP_RATE_BUDGET', 'CONCURRENCY', 'MAX_ZONES_PER_CALL', 'IP_ACCOUNT_ID'];
+  'OTP_ISSUER', 'CACHE_TTL_MINUTES', 'IP_RATE_BUDGET', 'CONCURRENCY', 'MAX_ZONES_PER_CALL', 'IP_ACCOUNT_ID', 'CACHE_RULE_NAME'];
 
 const say = (s = '') => console.log(s);
 const step = (s) => console.log('\n▶ ' + s);
@@ -109,6 +112,11 @@ vars.OTP_ISSUER = val('OTP_ISSUER') ? check('OTP_ISSUER', 'otpIssuer', val('OTP_
 vars.IP_PAIR_ZONE_NAME = val('IP_PAIR_ZONE_NAME') ? check('IP_PAIR_ZONE_NAME', 'ipPairZoneName', val('IP_PAIR_ZONE_NAME')) : '';
 vars.IP_RATE_BUDGET = val('IP_RATE_BUDGET') ? String(check('IP_RATE_BUDGET', 'ipRateBudget', val('IP_RATE_BUDGET'))) : '900';
 if (val('IP_ACCOUNT_ID')) vars.IP_ACCOUNT_ID = val('IP_ACCOUNT_ID');
+// 정적파일 캐시 규칙 이름 — 예전 이름으로 규칙을 이미 걸어 둔 곳만 적는다 (비우면 기본 이름)
+if (val('CACHE_RULE_NAME')) {
+  if (val('CACHE_RULE_NAME').length > 100 || /["\\\r\n]/.test(val('CACHE_RULE_NAME'))) errors.push('CACHE_RULE_NAME: 100자 이하, 따옴표 · \\ 불가');
+  else vars.CACHE_RULE_NAME = val('CACHE_RULE_NAME');
+}
 
 // 이 스크립트로 이미 설치한 적이 있는지 (계정/이름별)
 let state = { installs: {} };
@@ -144,7 +152,8 @@ async function cf(token, path) {
   }
 }
 
-function writeConfig(accountId, kvId) {
+// 저장소 — D1(DB)
+function writeConfig(accountId, s) {
   const cfg = {
     name,
     account_id: accountId,
@@ -153,7 +162,7 @@ function writeConfig(accountId, kvId) {
     workers_dev: true,
     assets: { directory: './public', binding: 'ASSETS', run_worker_first: true },
   };
-  if (kvId) cfg.kv_namespaces = [{ binding: 'BDM_KV', id: kvId }];
+  if (s.d1Id) cfg.d1_databases = [{ binding: 'DB', database_name: name, database_id: s.d1Id }];
   if (domain) cfg.routes = [{ pattern: domain, custom_domain: true }];
   cfg.vars = vars;
   writeFileSync(CONFIG, '// setup.mjs 가 만든 파일 — 직접 고치지 말고 setup.env 를 고친 뒤 node setup.mjs\n' + JSON.stringify(cfg, null, 2) + '\n');
@@ -212,7 +221,7 @@ const inst = state.installs[key] || {};
 const firstRun = !inst.deployed;
 
 // ── 3. 같은 이름의 Worker 가 이미 있는지 ───────────────────────
-writeConfig(accountId, inst.kvId);
+writeConfig(accountId, inst);
 if (firstRun) {
   step('같은 이름의 Worker 가 있는지 확인');
   const d = await wrangler(['deployments', 'list', '--config', CONFIG], { echo: false });
@@ -237,31 +246,60 @@ if (DRY) {
   const r = await wrangler(['deploy', '--dry-run', '--config', CONFIG]);
   if (r.code !== 0) fail('빌드 검사에 실패했습니다.');
   say('\n✔ 확인 완료 — 아무것도 만들지 않았습니다. 실제 설치:  node setup.mjs');
-  say('  하게 될 일: ' + (inst.kvId ? 'KV 그대로 사용' : 'KV 새로 만들기') + ' → 배포(' + name + ')' +
+  say('  하게 될 일: ' + (inst.d1Id ? 'D1 그대로 사용' : 'D1 ' + name + ' 만들기 (있으면 테이블 확인 후 사용)') + ' → 배포(' + name + ')' +
     (domain ? ' → 도메인 ' + domain : '') + ' → 시크릿 ' + [...SECRET_KEYS.filter((k) => val(k)), ...(inst.sessionSecret ? [] : ['SESSION_SECRET(자동)'])].join(' · '));
   done();
 }
 
-// ── 4. KV ─────────────────────────────────────────────────────
-let kvId = inst.kvId;
-if (!kvId) {
-  step('KV 만들기');
-  const title = name + '-kv';
-  const c = await wrangler(['kv', 'namespace', 'create', title, '--config', CONFIG]);
-  kvId = (/"?id"?\s*[:=]\s*"([0-9a-f]{32})"/.exec(c.out) || [])[1];
-  if (!kvId) {
-    // 이미 있으면(예전 설치 기록을 잃은 경우) 목록에서 찾는다
-    const l = await wrangler(['kv', 'namespace', 'list', '--config', CONFIG], { echo: false });
-    try {
-      const found = JSON.parse(l.out.slice(l.out.indexOf('['))).find((n) => n.title === title || n.title.endsWith('-' + title));
-      if (found) kvId = found.id;
-    } catch { /* 아래에서 실패 처리 */ }
+// ── 4. 저장소 (D1) ─────────────────────────────────────────────
+// 이름 = WORKER_NAME. 대시보드에서 먼저 만들어 둔 같은 이름의 D1 이 있으면 그것을 쓴다.
+// 테이블은 Worker 가 처음 쓸 때 만든다.
+const saveState = () => { state.installs[key] = inst; writeFileSync(STATE, JSON.stringify(state, null, 2) + '\n'); };
+// --json 출력에서 JSON 배열만 — 앞에 경고 줄([WARNING] 등)이 섞여도 줄 맨 앞의 [ 부터 읽는다
+const jsonOut = (out) => JSON.parse(out.slice(out.search(/^\[\s*(\{|\]|$)/m)));
+// 목록을 못 읽으면 null (없음 '' 과 구분 — 못 읽었는데 새로 만들면 안 된다)
+async function listJson(args) {
+  const l = await wrangler([...args, '--config', CONFIG], { echo: false });
+  if (l.code !== 0) return null;
+  try { return jsonOut(l.out); } catch { return null; }
+}
+async function findD1() {
+  const list = await listJson(['d1', 'list', '--json']);
+  return list === null ? null : (list.find((d) => d.name === name) || {}).uuid || '';
+}
+// 다른 용도로 쓰던 DB 에 이 도구의 테이블을 섞지 않게 — 우리 테이블 말고 다른 게 있으면 멈춘다 (같이 써도 되면 --share-d1)
+async function checkD1Tables(d1Id) {
+  writeConfig(accountId, { d1Id });
+  const t = await wrangler(['d1', 'execute', name, '--remote', '--json', '--command',
+    "SELECT name FROM sqlite_master WHERE type='table'", '--config', CONFIG], { echo: false });
+  let tables = null;
+  try { tables = jsonOut(t.out)[0].results.map((r) => r.name).filter((n) => !/^(sqlite_|_cf_)/.test(n)); } catch { /* 아래 */ }
+  if (!tables) fail('D1 ' + name + ' 의 테이블을 확인하지 못했습니다:\n' + t.out.trim().split('\n').slice(-5).join('\n'));
+  const others = tables.filter((n) => !TABLES.includes(n));
+  if (others.length && !has('--share-d1')) fail('D1 ' + name + ' 에 이 도구가 만들지 않은 테이블이 있습니다: ' + others.join(', ') +
+    '\n  다른 WORKER_NAME 을 쓰세요. (이 DB 를 같이 써도 되면 --share-d1)');
+  if (others.length) say('  ⚠ 다른 테이블(' + others.join(', ') + ')이 있는 DB 를 --share-d1 이라 같이 씁니다');
+  say('  있음 — 그대로 씁니다 (' + (tables.some((n) => TABLES.includes(n)) ? '이 도구의 테이블 있음' : tables.length ? '이 도구의 테이블 없음' : '비어 있음') + ')');
+}
+if (!inst.d1Id) {
+  step('D1 (' + name + ')');
+  let d1Id = await findD1();
+  if (d1Id === null) fail('D1 목록을 읽지 못했습니다. 위 메시지나 로그인 · 권한을 확인하세요.');
+  if (d1Id) {
+    await checkD1Tables(d1Id);
+  } else {
+    const c = await wrangler(['d1', 'create', name, '--config', CONFIG]);
+    d1Id = (/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/.exec(c.out) || [])[1] || '';
+    if (!d1Id) {
+      // 만들다 실패했는데 같은 이름이 생겨 있으면(경쟁 · 출력 형식 변화) 그 DB 도 테이블 검사를 거친다
+      d1Id = (await findD1()) || '';
+      if (!d1Id) fail('D1 을 만들지 못했습니다. 위 메시지를 확인하세요.');
+      await checkD1Tables(d1Id);
+    }
   }
-  if (!kvId) fail('KV 를 만들지 못했습니다. 위 메시지를 확인하세요.');
-  inst.kvId = kvId;
-  state.installs[key] = inst;
-  writeFileSync(STATE, JSON.stringify(state, null, 2) + '\n');
-  writeConfig(accountId, kvId);
+  inst.d1Id = d1Id;
+  saveState();
+  writeConfig(accountId, inst);
 }
 
 // ── 5. 배포 + 시크릿 ──────────────────────────────────────────

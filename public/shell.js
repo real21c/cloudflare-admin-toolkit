@@ -15,11 +15,13 @@ const ICON = {
   list: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   help: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.9M12 17h.01"/></svg>',
+  lock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
 };
 const MENU = [
   { sec: '관리' },
   { key: 'domains', href: '/', label: 'DNS · SSL/TLS', icon: ICON.globe },
   { key: 'ip', href: '/ip.html', label: 'IP Rules', icon: ICON.shield },
+  { key: 'security', href: '/security.html', label: 'Security', icon: ICON.lock },
   { sec: '기록' },
   { key: 'log', href: '/#log', label: '변경 이력', icon: ICON.list },
   { sec: '시스템' },
@@ -31,6 +33,7 @@ const isIndex = (p) => p === '/' || p === '/index.html';
 export function currentMenu() {
   const p = location.pathname;
   if (p === '/ip.html' || p === '/ip') return 'ip'; // Workers 는 /ip.html 을 /ip 로 돌려보낸다
+  if (p === '/security.html' || p === '/security') return 'security';
   if (p === '/settings.html' || p === '/settings') return 'settings';
   if (p === '/help.html' || p === '/help') return 'help';
   if (isIndex(p)) return location.hash === '#log' ? 'log' : 'domains';
@@ -306,6 +309,7 @@ async function otpRegister(data, expect) {
   if (!data) return false;
   if (data.mode !== expect) { alert(STALE_MSG); return false; }
   const who = data.account;
+  let done = null;
   const ok = await miniOpen(data.mode === 'rekey' ? '휴대폰 변경 — ' + who : '구글 OTP 등록 — ' + who, (b, finish) => {
     const steps = el('ol', 'otp-steps');
     steps.append(el('li', null, (data.mode === 'add' ? who + ' 님의 ' : '') + '휴대폰 Google OTP 앱에서 + 를 누르고 QR 코드를 스캔합니다.'));
@@ -316,15 +320,54 @@ async function otpRegister(data, expect) {
     key.title = data.issuer + ' · ' + data.account;
     b.append(steps, qr, key);
     return otpCodeInput(b, finish, '등록', async (code) => {
-      await otpApi('/auth/otp/enable', { code });
+      done = await otpApi('/auth/otp/enable', { code });
       return null;
     });
   }, true);
   if (!ok) return false;
-  if (data.mode === 'first') alert('구글 OTP 가 등록되었습니다. ' + who + ' 님이 관리자입니다.\n다음 로그인부터 비밀번호와 OTP 6자리를 함께 입력합니다.');
-  else if (data.mode === 'add') alert(who + ' 님의 OTP 가 등록되었습니다.');
-  else alert('휴대폰을 바꿨습니다. 예전 휴대폰의 OTP 는 더 이상 쓸 수 없습니다.');
+  const note = data.mode === 'first'
+    ? '구글 OTP 가 등록되었습니다. ' + who + ' 님이 관리자입니다. 다음 로그인부터 비밀번호와 OTP 6자리를 함께 입력합니다.'
+    : data.mode === 'add'
+      ? who + ' 님의 OTP 가 등록되었습니다.'
+      : '휴대폰을 바꿨습니다. 예전 휴대폰의 OTP 와 예전 복구 코드는 더 이상 쓸 수 없습니다.';
+  if (done && done.codes) await showBackupCodes(who, done.codes, note);
+  else alert(note);
   return true;
+}
+
+// 복구 코드 표시 — 이때 한 번만 보여준다 (서버에는 해시만 남음)
+async function showBackupCodes(who, codes, note) {
+  await miniOpen('복구 코드 — ' + who, (b, finish) => {
+    if (note) b.append(el('div', 'otp-msg', note));
+    b.append(el('div', 'otp-msg', '휴대폰을 못 쓸 때 로그인의 OTP 칸에 대신 넣는 일회용 코드입니다 (각각 한 번씩). 지금 저장하세요 — 다시 보여주지 않습니다.'));
+    const box = el('div', 'codes');
+    for (const c of codes) box.append(el('span', 'code', c));
+    b.append(box);
+    const cp = el('button', 'tiny', '전체 복사');
+    cp.onclick = async () => {
+      try { await navigator.clipboard.writeText(codes.join('\n')); cp.textContent = '복사됨'; }
+      catch (e) { cp.textContent = '복사 실패 — 드래그해서 복사하세요'; }
+    };
+    b.append(cp);
+    $('#miniOk').textContent = '저장했습니다';
+    $('#miniOk').onclick = () => finish(true);
+    return null;
+  }, true);
+}
+
+// 복구 코드 재발급 — 본인 OTP 확인. 기존 코드는 전부 무효
+async function reissueCodes() {
+  let data = null;
+  const ok = await miniOpen('복구 코드 재발급', (b, finish) => {
+    b.append(el('div', 'otp-msg', '새 코드 10개가 발급되고, 기존 복구 코드는 전부 무효가 됩니다.'));
+    b.append(el('label', 'otp-lab', '확인 — 지금 내 앱에 표시된 6자리'));
+    return otpCodeInput(b, finish, '재발급', async (c) => {
+      data = await otpApi('/auth/otp/codes', { code: c });
+      return null;
+    });
+  }, true);
+  if (ok && data && data.codes) await showBackupCodes(data.name, data.codes);
+  await refreshOtpPanel();
 }
 
 // 처음 등록 — 이 사람이 관리자가 된다
@@ -406,10 +449,14 @@ function renderOtpPanel() {
     tr.append(el('td', 'when', fmtWhen(d.lastLogin)));
     const st = el('td');
     st.append(el('span', d.enabled ? 'chip ok' : 'chip', d.enabled ? '사용 중' : '중지됨'));
+    const cl = el('span', 'chip' + (d.codesLeft ? '' : ' warn'), '복구 ' + (d.codesLeft || 0));
+    cl.title = '남은 복구 코드 — 휴대폰을 못 쓸 때 OTP 대신 쓰는 일회용 코드';
+    st.append(cl);
     tr.append(st);
     const act = el('td', 'act');
+    const btn = (label, fn, cls) => { const x = el('button', 'tiny' + (cls ? ' ' + cls : ''), label); x.onclick = fn; act.append(x); };
+    if (otp.me && otp.me.id === d.id) btn('복구 코드', reissueCodes);
     if (otp.isOwner) {
-      const btn = (label, fn, cls) => { const x = el('button', 'tiny' + (cls ? ' ' + cls : ''), label); x.onclick = fn; act.append(x); };
       btn('이름 변경', () => otpDeviceAction(d, 'rename'));
       if (d.owner) {
         btn('휴대폰 변경', otpRekey);

@@ -1,4 +1,4 @@
-// 구글 OTP — 사람별 등록 · 사용중지 (KV)
+// 구글 OTP — 사람별 등록 · 사용중지 (저장소: D1 의 app_data 를 키 · 값으로)
 //
 //   otp:devices     [{ id, name, secret, since, enabled, owner, gen }]   목록. 관리자만 바꾼다
 //   otp:use:<id>    { counter, at }   마지막으로 쓴 코드(재사용 방지)와 마지막 로그인 시각. 로그인 때만 쓴다
@@ -13,8 +13,8 @@
 // gen — 사용중지하거나 휴대폰을 바꾸면 올린다. 세션 쿠키에 gen 이 들어 있어서
 // 값이 다른 세션(= 그 전에 로그인해 둔 창)은 바로 끊긴다.
 //
-// 모두 휴대폰을 잃어버렸을 때 (프로젝트 폴더에서):
-//   npx wrangler kv key delete --binding BDM_KV otp:devices --remote
+// 모두 휴대폰을 잃어버렸을 때 (프로젝트 폴더에서, 복구 코드도 없으면):
+//   npx wrangler d1 execute DB --remote --command "DELETE FROM app_data WHERE key = 'otp:devices'"
 //   → 비밀번호만으로 로그인 → 다시 등록 (처음 등록한 사람이 관리자)
 
 import { verifyCode } from './totp.js';
@@ -59,7 +59,7 @@ export async function checkDevice(kv, device, code, login, now) {
 }
 
 // 고정 창 실패 카운터 — 첫 실패부터 windowSec 동안 센다. 이후 실패가 창을 뒤로 밀지 않는다.
-// KV 값: { n, start }  (expiration 은 절대 시각이고 최소 60초 뒤여야 한다)
+// 저장 값: { n, start }  (expiration 은 절대 시각, 최소 60초 뒤로 둔다)
 export async function countFail(kv, key, windowSec) {
   const now = Date.now();
   let v = await kv.get(key, 'json');
@@ -89,6 +89,61 @@ export async function stepUp(kv, device, code) {
   return r;
 }
 
+// ── 복구 코드 ────────────────────────────────────────────────
+// OTP 등록(처음/추가/휴대폰 변경) 때 10개 발급해 한 번 보여주고, 저장소에는 SHA-256 해시만 남긴다.
+//   otp:codes:<id>   [hash…]   한 번 쓰면 그 해시를 지운다 (일회용)
+export const BACKUP_COUNT = 10;
+const CODE_ALPHA = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // 0/O · 1/I/L 처럼 헷갈리는 글자 제외
+
+export function newBackupCodes() {
+  const out = [];
+  for (let i = 0; i < BACKUP_COUNT; i++) {
+    const b = crypto.getRandomValues(new Uint8Array(8));
+    let c = '';
+    for (const x of b) c += CODE_ALPHA[x % CODE_ALPHA.length];
+    out.push(c.slice(0, 4) + '-' + c.slice(4));
+  }
+  return out;
+}
+
+export const normalizeBackup = (v) => String(v || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+
+async function hashCode(norm) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('backup:' + norm));
+  return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function saveBackupCodes(kv, id, codes) {
+  const hashes = [];
+  for (const c of codes) hashes.push(await hashCode(normalizeBackup(c)));
+  await kv.put('otp:codes:' + id, JSON.stringify(hashes));
+}
+
+export async function backupLeft(kv, id) {
+  const v = await kv.get('otp:codes:' + id, 'json');
+  return Array.isArray(v) ? v.length : 0;
+}
+
+// 로그인 — 사용 중인 사람들의 복구 코드에서 찾는다. 맞으면 그 코드는 즉시 폐기
+export async function matchBackup(kv, list, input, now) {
+  const norm = normalizeBackup(input);
+  if (norm.length !== 8) return { device: null };
+  const h = await hashCode(norm);
+  for (const d of list) {
+    if (!d.enabled) continue;
+    const v = await kv.get('otp:codes:' + d.id, 'json');
+    if (!Array.isArray(v)) continue;
+    const i = v.indexOf(h);
+    if (i === -1) continue;
+    v.splice(i, 1);
+    await kv.put('otp:codes:' + d.id, JSON.stringify(v));
+    const use = await getUse(kv, d.id);
+    await putUse(kv, d.id, { counter: use.counter, at: now });
+    return { device: d, left: v.length };
+  }
+  return { device: null };
+}
+
 // 로그인 — 사용 중인 사람들 가운데 코드가 맞는 사람을 찾는다
 export async function matchLogin(kv, list, code, now) {
   let reused = false;
@@ -106,7 +161,10 @@ export async function publicList(kv, list) {
   const out = [];
   for (const d of list) {
     const use = await getUse(kv, d.id);
-    out.push({ id: d.id, name: d.name, since: d.since, enabled: !!d.enabled, owner: !!d.owner, lastLogin: use.at });
+    out.push({
+      id: d.id, name: d.name, since: d.since, enabled: !!d.enabled, owner: !!d.owner,
+      lastLogin: use.at, codesLeft: await backupLeft(kv, d.id),
+    });
   }
   return out;
 }

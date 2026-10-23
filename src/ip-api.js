@@ -11,7 +11,7 @@
 //     → 서버 메모리 캐시가 없으므로 자산존 Allow Rule(mates)은 브라우저가 존 목록에서 찾아 같이 보낸다.
 //   - 5분 900회 속도 조절도 브라우저가 한다. 서버는 응답마다 이번에 쓴 호출 수(calls)를 알려 주고,
 //     Cloudflare 가 429 를 주면 거기서 멈추고 rateLimited + retryAfter 를 돌려준다.
-//   - 분류 규칙(filters)은 저장소 ip:filters 에 둔다 (Workers = KV, 로컬 = data/).
+//   - 분류 규칙(filters)은 저장소 ip:filters 에 둔다 (Workers = D1, 로컬 = data/).
 //   - 계정 ID · 자산존 ID 는 토큰으로 자동으로 찾는다 (설정으로 줄 수도 있다).
 //
 // 필요한 토큰 권한: Account > Account Firewall Access Rules > Edit
@@ -235,7 +235,7 @@ export function createIpApi({ store, config, log }) {
     id: Math.random().toString(36).slice(2, 10), ts: nowStamp(), zone: value || '(IP 없음)', zoneId: '', action, label,
   });
 
-  // 이력 쓰기가 실패해도(KV 1초 1회 쓰기 제한, 하루 쓰기 한도) Cloudflare 에 이미 적용된 결과는 그대로 돌려준다
+  // 이력 쓰기가 실패해도(저장소 쓰기 제한 등) Cloudflare 에 이미 적용된 결과는 그대로 돌려준다
   async function safeLog(entries, out) {
     if (!entries.length) return;
     try { await log(entries); } catch (e) { out.logError = '변경 이력 기록 실패: ' + e.message; }

@@ -1,14 +1,14 @@
-// KV 기반 저장소 (Workers 용)
+// 키 · 값 저장소 위의 store (Workers 용) — kv 는 store-d1.js 의 createD1Kv (D1 app_data 테이블)
 //
 // store-file.js 와 같은 인터페이스를 제공한다: get / put / update / keys
-// 로컬은 파일, Workers 는 KV — 나머지 코드는 어느 쪽인지 몰라도 된다.
+// 로컬은 파일, Workers 는 D1 — 나머지 코드는 어느 쪽인지 몰라도 된다.
 //
-// 주의: KV 는 append 가 없어서 update 는 읽기→수정→쓰기다.
+// 주의: update 는 읽기→수정→쓰기다.
 // 동시 쓰기가 겹치면 유실될 수 있으므로, 호출하는 쪽에서
 // "작업 단위로 한 번만" 쓰도록 모아서 보낸다.
 
 export function createStore(kv) {
-  if (!kv) throw new Error('KV 바인딩이 없습니다.');
+  if (!kv) throw new Error('저장소가 없습니다.');
 
   return {
     async get(key, fallback) {

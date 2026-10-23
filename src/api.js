@@ -3,27 +3,27 @@
 
 import {
   createClient, pool, resolveScope, proxySummary, shortName,
-  proxyWarning, collectIps, recordOrder, SSL_LABEL, nowStamp, monthKey, CACHE_RULE_DESC, CACHE_RULE_EXPR,
+  proxyWarning, collectIps, recordOrder, SSL_LABEL, nowStamp, CACHE_RULE_DESC, CACHE_RULE_EXPR,
+  SCAN_RULE_DESC, DEFAULT_SCAN_EXPR, normExpr, scanState, otherRules, validateScanExpr,
 } from './core.js';
 import { createIpApi } from './ip-api.js';
+import { createStoreData } from './log-store.js';
 import { FIELDS, SECTIONS, loadSettings, applySettings, pickDefaults, validateField, fieldLabel, isField } from './settings.js';
 import { VERSION } from './version.js';
 
 const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-export function createApi({ store, config }) {
+export function createApi({ store, config, data }) {
   const cf = config.token ? createClient(config.token) : null;
+  // 정적파일 캐시 규칙 이름 — 이 이름으로 우리 규칙을 찾는다 (변수 CACHE_RULE_NAME)
+  const CACHE_NAME = config.cacheRuleName || CACHE_RULE_DESC;
 
   // ── 캐시 ────────────────────────────────────────────────
-  const getCache = () => store.get('cache', {}).then((v) => v || {});
-
-  // 기존 항목에 덮어쓰지 않고 합친다.
-  // 상태(SSL·프록시)와 설정(캐시규칙·Tiered·Smart)을 따로 읽으므로, 한쪽을 쓸 때 다른 쪽이 지워지면 안 된다.
-  const putCacheEntries = (entries) =>
-    store.update('cache', {}, (cur) => {
-      for (const [zoneId, val] of Object.entries(entries)) cur[zoneId] = Object.assign({}, cur[zoneId], val);
-      return cur;
-    });
+  // 캐시 · 변경 이력은 data 에 — Workers 는 D1(store-d1.js), 로컬은 파일 store 위에서(log-store.js)
+  data = data || createStoreData(store);
+  const getCache = () => data.getCache();
+  // 기존 항목에 덮어쓰지 않고 합친다 (상태와 설정을 따로 읽으므로)
+  const putCacheEntries = (entries) => data.putCacheEntries(entries);
 
   const isFresh = (e) =>
     !!(e && e.at) && Date.now() - e.at < config.cacheTtlMinutes * 60 * 1000;
@@ -57,7 +57,7 @@ export function createApi({ store, config }) {
     ]);
     return {
       // null = 확인 못함, true/false = 규칙 유무
-      cacheRule: rules === null ? null : rules.some((r) => r.description === CACHE_RULE_DESC),
+      cacheRule: rules === null ? null : rules.some((r) => r.description === CACHE_NAME),
       tiered: tiered,
       smart: smart,
       cfgAt: Date.now(),
@@ -69,31 +69,11 @@ export function createApi({ store, config }) {
     if (!entries.length) return;
     // 누가 바꿨는지 — Workers 에서 OTP 로 로그인했으면 그 이름 (로컬·비밀번호만이면 없음)
     if (config.actor) for (const e of entries) e.by = config.actor;
-    await store.update('log:' + monthKey(), [], (cur) => cur.concat(entries));
+    await data.appendLog(entries);
   }
 
-  async function readLog(limit) {
-    const keys = (await store.keys('log:')).sort().reverse();
-    let out = [];
-    for (const k of keys) {
-      out = ((await store.get(k, [])) || []).concat(out);
-      if (out.length >= limit) break;
-    }
-    return out.slice(-limit).reverse();
-  }
-
-  async function markReverted(entryId) {
-    for (const k of await store.keys('log:')) {
-      const rows = (await store.get(k, [])) || [];
-      if (rows.some((r) => r.id === entryId)) {
-        await store.update(k, [], (cur) =>
-          cur.map((r) => (r.id === entryId ? Object.assign({}, r, { reverted: true }) : r))
-        );
-        return true;
-      }
-    }
-    return false;
-  }
+  const readLog = (limit) => data.readLog(limit);
+  const markReverted = (entryId) => data.patchLog(entryId, { reverted: true });
 
   function scopeLabel(mode, ip) {
     if (mode === 'ip') return ip;
@@ -111,10 +91,10 @@ export function createApi({ store, config }) {
       zones,
       async (z) => {
         const cur = await cf.getCacheRules(z.id);
-        const has = cur.some((r) => r.description === CACHE_RULE_DESC);
+        const has = cur.some((r) => r.description === CACHE_NAME);
         if (has === value) return { zone: z, has, changed: false, others: cur.length - (has ? 1 : 0) };
         if (preview) return { zone: z, has, changed: true, others: cur.length - (has ? 1 : 0) };
-        await cf.setCacheRule(z.id, value);
+        await cf.setCacheRule(z.id, value, CACHE_NAME);
         return { zone: z, has, changed: true, others: cur.length - (has ? 1 : 0), applied: true };
       },
       config.concurrency
@@ -591,6 +571,121 @@ export function createApi({ store, config }) {
       return { status: 200, body: { config: out, fetched: need.length } };
     }
 
+    // ── Security — Scan check (WAF 사용자 정의 규칙) ─────────────
+    if (path.startsWith('/api/security')) {
+      const getExpr = async () => normExpr((await store.get('scan:expr', null)) || DEFAULT_SCAN_EXPR);
+
+      // 화면 — 조건식 + 도메인 전체 + 마지막으로 읽은 상태
+      if (path === '/api/security' && method === 'GET') {
+        const [zones, cache, expr, groups] = await Promise.all([
+          cf.listZones(), getCache(), getExpr(), store.get('groups', { order: [], map: {} }),
+        ]);
+        return {
+          status: 200,
+          body: {
+            expr, defaultExpr: DEFAULT_SCAN_EXPR, ruleName: SCAN_RULE_DESC, canEdit: !!config.canAdmin,
+            maxZonesPerCall: config.maxZonesPerCall, groups,
+            zones: zones.map((z) => {
+              const c = cache[z.id] || {};
+              let scan = c.scanAt ? c.scan : null;
+              // 조건식을 바꾼 뒤에는 그 전에 'on' 이었던 존도 지금 식과 다르다
+              if (scan === 'on' && normExpr(c.scanExpr) !== expr) scan = 'diff';
+              return {
+                id: z.id, name: z.name, group: groups.map[z.name] || null,
+                scan, others: c.scanOthers || [], scanAt: c.scanAt || null,
+                stale: !c.scanAt || Date.now() - c.scanAt >= CFG_TTL,
+              };
+            }),
+          },
+        };
+      }
+
+      // 상태 읽기 — 존마다 1회 호출. 하루 지난 것만, force 면 전부
+      if (path === '/api/security/status' && method === 'POST') {
+        const expr = await getExpr();
+        const ids = body.zoneIds || [];
+        const cache = await getCache();
+        const need = body.force ? ids : ids.filter((id) => !(cache[id] && cache[id].scanAt) || Date.now() - cache[id].scanAt >= CFG_TTL);
+        const outs = await pool(need, (id) => cf.getFirewallRules(id), config.concurrency);
+        const out = {};
+        const upd = {};
+        for (let i = 0; i < need.length; i++) {
+          const id = need[i];
+          if (outs[i].ok) {
+            const rules = outs[i].value;
+            const v = { scan: scanState(rules, expr), scanOthers: otherRules(rules), scanExpr: expr, scanAt: Date.now() };
+            upd[id] = v;
+            out[id] = { scan: v.scan, others: v.scanOthers, scanAt: v.scanAt };
+          } else {
+            out[id] = { scan: null, others: [], error: String(outs[i].error.message || outs[i].error) };
+          }
+        }
+        if (Object.keys(upd).length) await putCacheEntries(upd);
+        // 다시 읽지 않은 존 — 캐시 값 (그 사이 조건식이 바뀌었으면 on 도 diff 로)
+        for (const id of ids) {
+          if (out[id]) continue;
+          const c = cache[id] || {};
+          let s = c.scan;
+          if (s === 'on' && normExpr(c.scanExpr) !== expr) s = 'diff';
+          out[id] = { scan: s == null ? null : s, others: c.scanOthers || [], scanAt: c.scanAt || null };
+        }
+        return { status: 200, body: { status: out, fetched: need.length } };
+      }
+
+      // 적용 / 제거 — value true = 지금 조건식으로 넣기(있으면 교체), false = 빼기. 존마다 읽기 1 + 쓰기 1
+      if (path === '/api/security/apply' && method === 'POST') {
+        const expr = await getExpr();
+        const value = !!body.value;
+        const zones = body.zones || [];
+        const outs = await pool(zones, async (z) => {
+          const cur = await cf.getFirewallRules(z.id);
+          const before = scanState(cur, expr);
+          if (value ? before === 'on' : before === 'off') return { before, after: before, changed: false, rules: cur };
+          const rules = await cf.setScanRule(z.id, value, expr, cur);
+          return { before, after: scanState(rules, expr), changed: true, rules };
+        }, config.concurrency);
+
+        const result = [];
+        const logEntries = [];
+        const upd = {};
+        const word = { on: '적용됨', off: '없음', diff: '다름' };
+        for (let i = 0; i < zones.length; i++) {
+          const z = zones[i];
+          const o = outs[i];
+          if (!o.ok) { result.push({ zone: z.name, zoneId: z.id, ok: false, error: String(o.error.message || o.error) }); continue; }
+          const v = o.value;
+          upd[z.id] = { scan: v.after, scanOthers: otherRules(v.rules), scanExpr: expr, scanAt: Date.now() };
+          result.push({ zone: z.name, zoneId: z.id, ok: true, changed: v.changed, scan: v.after, others: otherRules(v.rules) });
+          if (v.changed) {
+            logEntries.push({
+              id: rid(), ts: nowStamp(), zone: z.name, zoneId: z.id, action: 'scan',
+              label: SCAN_RULE_DESC + ' ' + (value ? (v.before === 'diff' ? '업데이트' : '적용') : '제거') +
+                ' (' + word[v.before] + ' → ' + word[v.after] + ')',
+            });
+          }
+        }
+        if (Object.keys(upd).length) await putCacheEntries(upd);
+        await appendLog(logEntries);
+        return { status: 200, body: { result, logged: logEntries.length } };
+      }
+
+      // 조건식 저장 — 관리자만. 각 도메인에는 [적용] 해야 반영된다
+      if (path === '/api/security/expr' && method === 'PUT') {
+        if (!config.canAdmin) return { status: 403, body: { error: '조건식은 관리자만 바꿀 수 있습니다.' } };
+        let next;
+        try { next = body.reset ? DEFAULT_SCAN_EXPR : validateScanExpr(body.expr); }
+        catch (e) { return { status: 400, body: { error: e.message } }; }
+        const before = await getExpr();
+        if (normExpr(next) === before) return { status: 200, body: { expr: before, changed: false } };
+        await store.put('scan:expr', normExpr(next));
+        await appendLog([{
+          id: rid(), ts: nowStamp(), zone: 'Security', zoneId: '', action: 'scan-expr',
+          label: SCAN_RULE_DESC + ' 조건식 변경: ' + before + ' → ' + normExpr(next),
+        }]);
+        return { status: 200, body: { expr: normExpr(next), changed: true } };
+      }
+    }
+
     if (path === '/api/records' && method === 'POST') {
       const state = await fetchZoneState(body.zoneId);
       await putCacheEntries({ [body.zoneId]: state });
@@ -669,7 +764,7 @@ export function createApi({ store, config }) {
         }
       } else if (entry.action === 'cache') {
         try {
-          await cf.setCacheRule(entry.zoneId, entry.cacheBefore);
+          await cf.setCacheRule(entry.zoneId, entry.cacheBefore, CACHE_NAME);
           out.results.push({ name: '정적파일 캐시 규칙', ok: true });
         } catch (e) {
           out.results.push({ name: '정적파일 캐시 규칙', ok: false, error: String(e.message || e) });

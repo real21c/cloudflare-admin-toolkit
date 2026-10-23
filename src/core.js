@@ -60,6 +60,7 @@ export function proxyWarning(record, zoneName, allRecords) {
 //   엣지에 30일, 브라우저에 1일 붙들어 둔다.
 // ─────────────────────────────────────────────────────────────
 // 도구가 이 설명 문자열로 자기 규칙을 찾는다. 규칙을 건 뒤에 바꾸면 예전 규칙을 못 찾고 새로 하나 더 만든다.
+// 설치마다 바꿀 수 있다 (변수 CACHE_RULE_NAME) — 예전 이름으로 이미 규칙을 걸어 둔 곳은 그 이름을 적는다.
 export const CACHE_RULE_DESC = 'static-assets (cloudflare-admin-toolkit)';
 export const CACHE_RULE_EXPR =
   '(http.request.uri.path.extension in {"css" "js" "jpg" "jpeg" "png" "gif" "webp" "svg" "ico" "woff" "woff2" "ttf"})';
@@ -67,10 +68,10 @@ export const CACHE_RULE_EXPR =
 export const CACHE_EDGE_TTL = 2592000; // 30일
 export const CACHE_BROWSER_TTL = 86400; // 1일
 
-export function buildCacheRule() {
+export function buildCacheRule(name = CACHE_RULE_DESC) {
   return {
     action: 'set_cache_settings',
-    description: CACHE_RULE_DESC,
+    description: name,
     enabled: true,
     expression: CACHE_RULE_EXPR,
     action_parameters: {
@@ -79,6 +80,58 @@ export function buildCacheRule() {
       browser_ttl: { mode: 'override_origin', default: CACHE_BROWSER_TTL },
     },
   };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Scan check — 취약점 스캔(.env · .git 같은 민감 경로 찔러보기)을 엣지에서 차단하는 WAF 사용자 정의 규칙
+//   존마다 http_request_firewall_custom 단계에 우리 규칙 하나만 넣고 뺀다. 다른 규칙(Bot check 등)은 순서까지 그대로 둔다.
+//   조건식은 Security 화면에서 고친다(저장소 scan:expr). 고친 뒤 [적용] 해야 각 존에 반영된다.
+//   도구가 이 이름으로 자기 규칙을 찾으므로 이름은 바꾸지 않는다.
+// ─────────────────────────────────────────────────────────────
+export const SCAN_RULE_DESC = 'Scan check';
+export const SCAN_PHASE = 'http_request_firewall_custom';
+export const DEFAULT_SCAN_EXPR =
+  '(http.request.uri.path contains "/.env") or (http.request.uri.path contains "/.git")';
+
+export const normExpr = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
+export function buildScanRule(expr) {
+  return { action: 'block', description: SCAN_RULE_DESC, enabled: true, expression: normExpr(expr) };
+}
+
+// 존의 규칙 목록 → 우리 규칙 상태. 'on' 지금 조건 그대로 · 'diff' 있는데 조건 · 동작이 다르거나 꺼짐 · 'off' 없음
+export function scanState(rules, expr) {
+  const mine = rules.find((r) => r.description === SCAN_RULE_DESC);
+  if (!mine) return 'off';
+  const same = mine.action === 'block' && mine.enabled !== false && normExpr(mine.expression) === normExpr(expr);
+  return same ? 'on' : 'diff';
+}
+
+// 화면에 보여 줄 다른 규칙 (이름 · 동작 · 켜짐)
+export const otherRules = (rules) =>
+  rules.filter((r) => r.description !== SCAN_RULE_DESC)
+    .map((r) => ({ name: r.description || '(이름 없음)', action: r.action, enabled: r.enabled !== false }));
+
+// 조건식 저장 전 검사 — Cloudflare 문법 검사는 적용할 때 Cloudflare 가 한다.
+// 여기서는 218개 도메인 전체를 막아 버리는 실수만 막는다.
+export function validateScanExpr(v) {
+  const e = normExpr(v);
+  if (!e) throw new Error('조건식이 비어 있습니다.');
+  if (e.length > 4000) throw new Error('조건식이 너무 깁니다 (4,000자 이하).');
+  if (!/http\./.test(e)) throw new Error('조건식에 http.request… 필드가 없습니다.');
+  if (/\btrue\b/.test(e)) throw new Error('true 가 들어간 조건식은 모든 요청을 막을 수 있어 저장하지 않습니다.');
+  let depth = 0;
+  for (const ch of e.replace(/"(?:[^"\\]|\\.)*"/g, '""')) {
+    if (ch === '(') depth++;
+    else if (ch === ')' && --depth < 0) break;
+  }
+  if (depth !== 0) throw new Error('괄호 짝이 맞지 않습니다.');
+  if ((e.match(/"/g) || []).length % 2) throw new Error('따옴표 짝이 맞지 않습니다.');
+  // contains · starts_with 등에 짧은 값("/" "/a")을 쓰면 정상 페이지까지 다 걸린다
+  for (const m of e.matchAll(/(?:contains|starts_with|ends_with|wildcard)\s*\(?\s*(?:[a-z_.]+\s*,\s*)?"([^"]*)"/g)) {
+    if (m[1].length < 4) throw new Error('"' + m[1] + '" 처럼 짧은 값은 정상 페이지까지 막을 수 있습니다 (4자 이상).');
+  }
+  return e;
 }
 
 export class CfError extends Error {
@@ -276,11 +329,42 @@ export function createClient(token) {
     },
 
     // 우리 규칙만 추가/교체하거나 제거한다. 다른 규칙은 건드리지 않는다.
-    async setCacheRule(zoneId, enable) {
+    async setCacheRule(zoneId, enable, name = CACHE_RULE_DESC) {
       const cur = await this.getCacheRules(zoneId);
-      const others = cur.filter((r) => r.description !== CACHE_RULE_DESC);
-      const rules = enable ? [buildCacheRule()].concat(others) : others;
+      const others = cur.filter((r) => r.description !== name);
+      const rules = enable ? [buildCacheRule(name)].concat(others) : others;
       const j = await call('/zones/' + zoneId + '/rulesets/phases/http_request_cache_settings/entrypoint', {
+        method: 'PUT',
+        body: { rules: rules },
+      });
+      return (j.result && j.result.rules) || [];
+    },
+
+    // 이 zone 의 WAF 사용자 정의 규칙 목록
+    async getFirewallRules(zoneId) {
+      try {
+        const j = await call('/zones/' + zoneId + '/rulesets/phases/' + SCAN_PHASE + '/entrypoint');
+        return (j.result && j.result.rules) || [];
+      } catch (e) {
+        if (e.status === 404) return []; // 아직 규칙이 하나도 없는 zone
+        throw e;
+      }
+    },
+
+    // Scan check 만 넣거나(있으면 그 자리에서 교체) 뺀다. 다른 규칙은 순서까지 그대로 둔다.
+    // cur — 방금 읽은 규칙 목록 (다시 읽지 않게)
+    async setScanRule(zoneId, enable, expr, cur) {
+      const i = cur.findIndex((r) => r.description === SCAN_RULE_DESC);
+      let rules;
+      if (enable) {
+        rules = cur.slice();
+        const mine = buildScanRule(expr);
+        if (i === -1) rules.push(mine);
+        else rules[i] = Object.assign({ id: cur[i].id }, mine);
+      } else {
+        rules = cur.filter((r) => r.description !== SCAN_RULE_DESC);
+      }
+      const j = await call('/zones/' + zoneId + '/rulesets/phases/' + SCAN_PHASE + '/entrypoint', {
         method: 'PUT',
         body: { rules: rules },
       });

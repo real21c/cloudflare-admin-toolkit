@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security · Cloudflare Admin Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shell.css">
+<style>
+  /* DNS · SSL/TLS 화면과 같은 틀 — 그룹 탭 · 작업 패널 · 도메인 표 */
+  .tabsrow {
+    display: flex; align-items: flex-end; gap: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+  .tab {
+    padding: 9px 14px; font-size: 13.5px; cursor: pointer; color: var(--dim);
+    border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.on { color: var(--text); font-weight: 600; border-bottom-color: var(--cf-orange); }
+  .tab .n {
+    display: inline-block; margin-left: 6px; padding: 1px 6px;
+    background: var(--line-soft); font-size: 11.5px; font-weight: 500; color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .tab.on .n { background: var(--cf-orange-bg); color: var(--cf-orange-dk); }
+  #q { min-width: 220px; height: 30px; margin-bottom: 5px; }
+  /* 상태 필터 — 전체 / 적용 / 미적용 */
+  .seg { display: inline-flex; border: 1px solid var(--line); margin-bottom: 5px; }
+  .seg button {
+    border: none; border-right: 1px solid var(--line); height: 30px; padding: 0 12px;
+    font-size: 13px; background: var(--panel); white-space: nowrap;
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button:hover:not(:disabled):not(.on) { background: var(--bg); }
+  .seg button.on { background: var(--cf-orange); color: #fff; font-weight: 600; }
+  .seg button .n { margin-left: 6px; font-size: 11.5px; opacity: .75; font-variant-numeric: tabular-nums; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); margin-bottom: 16px; box-shadow: var(--shadow); }
+  .prow { display: flex; align-items: flex-start; gap: 14px; padding: 12px 16px; }
+  .prow + .prow { border-top: 1px solid var(--line-soft); }
+  .plabel {
+    flex: 0 0 132px; font-size: 11.5px; font-weight: 700; color: var(--dim);
+    letter-spacing: .03em; text-align: right; padding-top: 7px;
+  }
+  .pbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .phint { font-size: 12px; color: var(--dim); line-height: 1.5; }
+  #expr {
+    width: 100%; min-height: 84px; resize: vertical; padding: 8px 10px;
+    font: inherit; font-size: 13px; line-height: 1.5; color: var(--text);
+    background: var(--panel); border: 1px solid var(--line);
+  }
+  #expr:focus-visible { outline: 2px solid var(--cf-blue); outline-offset: 1px; }
+  #expr:disabled { color: var(--dim); background: var(--bg); }
+  .erow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .emsg { font-size: 12.5px; color: var(--dim); margin-right: auto; }
+  .emsg.ok { color: var(--green); }
+  .emsg.bad { color: var(--red); }
+  .counts { font-size: 13px; color: var(--dim); }
+  .counts b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .actrow { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  button.act {
+    display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center;
+    height: 68px; padding: 0 24px; border: none; color: #fff;
+  }
+  button.act .actmain { font-size: 18px; font-weight: 700; line-height: 1.2; }
+  button.act .actsub { font-size: 13px; opacity: .9; margin-top: 6px; }
+  button.act .actsub b { font-size: 15px; font-variant-numeric: tabular-nums; }
+  button.act.on  { background: var(--cf-orange); }
+  button.act.on:hover:not(:disabled)  { background: var(--cf-orange-dk); border-color: transparent; }
+  button.act.off { background: #6b6b6b; }
+  button.act.off:hover:not(:disabled) { background: #575757; border-color: transparent; }
+  button.act:disabled { opacity: .35; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 9px 12px; text-align: left; }
+  th {
+    font-size: 11.5px; font-weight: 600; color: var(--dim); letter-spacing: .03em;
+    text-transform: uppercase; background: var(--panel);
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2;
+  }
+  td { border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--bg); }
+  td.c, th.c { text-align: center; }
+  input[type=checkbox] { accent-color: var(--cf-blue); width: 15px; height: 15px; cursor: pointer; }
+  .dname { font-weight: 500; }
+  .na { color: var(--dimmer); }
+  td.tgl { cursor: pointer; }
+  td.tgl:hover .chip { box-shadow: 0 0 0 1px var(--dimmer) inset; }
+
+  .progress { height: 2px; background: var(--line-soft); overflow: hidden; margin-bottom: 14px; }
+  .progress > i { display: block; height: 100%; width: 0; background: var(--cf-orange); transition: width .18s; }
+
+  /* 전체 화면 진행 창 — DNS · SSL/TLS 의 일괄 적용과 같은 모양 */
+  .overlay {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ovl-box {
+    background: var(--panel); border: 1px solid var(--line);
+    padding: 26px 30px; min-width: 420px; max-width: 92vw; box-shadow: 0 12px 48px rgba(0,0,0,.4);
+  }
+  .ovl-title { font-size: 15px; font-weight: 650; margin-bottom: 16px; }
+  .ovl-bar { height: 6px; background: var(--line-soft); overflow: hidden; }
+  .ovl-bar > i { display: block; height: 100%; width: 0; background: var(--cf-orange); transition: width .2s; }
+  .ovl-sub {
+    margin-top: 10px; font-size: 12.5px; color: var(--dim);
+    font-variant-numeric: tabular-nums; display: flex; justify-content: space-between;
+  }
+
+  @media (max-width: 800px) {
+    .wrap { padding: 14px 10px; }
+    .prow { flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px; }
+    .plabel { flex: 0 0 100%; text-align: left; padding-top: 0; }
+    button.act { width: 100%; height: auto; min-height: 58px; padding: 10px 14px; }
+    .ovl-box { min-width: 0; width: 92vw; padding: 20px; }
+    th, td { padding: 8px 6px; }
+    td.tgl { cursor: default; } /* 모바일은 목록에서 변경 금지 — 체크 후 위 버튼으로 */
+    td.tgl:hover .chip { box-shadow: none; }
+  }
+  @media (max-width: 520px) {
+    /* 폰 — 그룹 열은 숨김 (DNS · SSL/TLS 와 같음) */
+    .card > table > thead > tr > th:nth-child(4),
+    .card > table > tbody > tr > td:nth-child(4) { display: none; }
+    .card > table > thead > tr > th:nth-child(1) { width: 24px; }
+    .dname { font-size: 13px; }
+    #q { min-width: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#f6821f" d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+    </svg>
+    Cloudflare Admin Toolkit
+  </span>
+  <span class="grow"></span>
+  <button class="tiny" id="btnReload" title="각 도메인의 WAF 사용자 정의 규칙을 전부 다시 읽습니다 (하루 한 번은 자동)">↻ 다시 읽기</button>
+  <button class="tiny hide" id="btnOtp" title="로그인할 때 구글 OTP 6자리를 함께 받습니다">2단계 인증</button>
+  <button class="tiny hide" id="btnLogout">로그아웃</button>
+</div>
+
+<div class="app">
+<nav id="side" class="side"></nav>
+<main class="main">
+<div class="wrap">
+  <h1>Security</h1>
+  <div class="sub" id="freshness">불러오는 중…</div>
+  <div id="notice" class="notice hide"></div>
+  <div class="progress hide" id="prog"><i></i></div>
+
+  <div class="tabsrow">
+    <div class="tabs" id="tabs"></div>
+    <span class="grow"></span>
+    <div class="seg" id="sfilter"></div>
+    <input type="text" id="q" placeholder="도메인 검색" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div class="panel">
+    <div class="prow">
+      <span class="plabel">Scan check 조건</span>
+      <div class="pbody">
+        <textarea id="expr" spellcheck="false" disabled></textarea>
+        <div class="erow">
+          <span class="emsg" id="emsg"></span>
+          <button class="ghost tiny" id="btnExprDefault" disabled>기본값으로</button>
+          <button class="tiny" id="btnExprSave" disabled>조건식 저장</button>
+        </div>
+        <div class="phint">각 도메인의 WAF 사용자 정의 규칙 <b>Scan check</b> (동작 Block). 조건식을 바꾸면 저장한 뒤 아래 <b>Scan check 적용</b>을 눌러야 도메인에 반영됩니다. 다른 규칙(Bot check 등)은 건드리지 않습니다.</div>
+      </div>
+    </div>
+    <div class="prow">
+      <span class="plabel">적용</span>
+      <div class="pbody">
+        <div class="counts" id="counts"></div>
+        <div class="actrow">
+          <button class="act on" id="btnApply" disabled>
+            <span class="actmain">Scan check 적용</span>
+            <span class="actsub" id="applySub"></span>
+          </button>
+          <button class="act off" id="btnRemove" disabled>
+            <span class="actmain">Scan check 제거</span>
+            <span class="actsub" id="removeSub"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view"></div>
+</div>
+</main>
+</div>
+
+<div class="overlay hide" id="ovl">
+  <div class="ovl-box">
+    <div class="ovl-title" id="ovlTitle"></div>
+    <div class="ovl-bar"><i id="ovlFill"></i></div>
+    <div class="ovl-sub" id="ovlSub"></div>
+  </div>
+</div>
+
+<script type="module">
+import { $, el, setBusyCheck } from '/shell.js';
+
+const state = {
+  zones: [], groups: { order: [], map: {} }, expr: '', defaultExpr: '', canEdit: false,
+  maxZones: 5, tab: '__all__', filter: 'all', selected: new Set(), busy: false,
+};
+let query = '';
+setBusyCheck(() => state.busy);
+
+async function api(path, opt) {
+  const r = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opt || {}));
+  if (r.status === 401) { location.href = '/login'; throw new Error('세션이 만료되었습니다.'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || j.message || ('HTTP ' + r.status));
+  return j;
+}
+const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) });
+
+const STATE = {
+  on: { cls: 'chip ok', text: '적용' },
+  diff: { cls: 'chip warn', text: '업데이트 필요' },
+  off: { cls: 'chip', text: '없음' },
+};
+
+// ── 탭 · 목록 ──────────────────────────────────────────────
+function groupNames() { return state.groups.order.slice(); }
+
+// 상태 필터 — 미적용 = 없음 · 업데이트 필요 · 확인 전 (적용이 아닌 것 전부)
+const passFilter = (z, f) => (f === 'on' ? z.scan === 'on' : f === 'off' ? z.scan !== 'on' : true);
+
+function visibleZones() {
+  return state.zones.filter((z) => {
+    if (query && z.name.toLowerCase().indexOf(query) === -1) return false;
+    if (!passFilter(z, state.filter)) return false;
+    if (state.tab === '__none__') return !z.group;
+    if (state.tab !== '__all__') return z.group === state.tab;
+    return true;
+  });
+}
+function selectAllVisible() { state.selected = new Set(visibleZones().map((z) => z.id)); }
+const selectedZones = () => state.zones.filter((z) => state.selected.has(z.id));
+
+function renderTabs() {
+  const box = $('#tabs'); box.innerHTML = '';
+  const add = (key, label, n) => {
+    const t = el('div', 'tab' + (state.tab === key ? ' on' : ''));
+    t.append(document.createTextNode(label));
+    t.append(el('span', 'n', String(n)));
+    t.onclick = () => { if (state.busy) return; state.tab = key; selectAllVisible(); renderAll(); };
+    box.append(t);
+  };
+  add('__all__', '전체', state.zones.length);
+  for (const g of groupNames()) add(g, g, state.zones.filter((z) => z.group === g).length);
+  add('__none__', '미분류', state.zones.filter((z) => !z.group).length);
+}
+
+function render() {
+  const rows = visibleZones();
+  const view = $('#view'); view.innerHTML = '';
+  const card = el('div', 'card');
+  if (!rows.length) {
+    card.append(el('div', 'empty', state.zones.length ? '조건에 맞는 도메인이 없습니다.' : '불러오는 중…'));
+    view.append(card); renderPanel(); return;
+  }
+  const table = el('table');
+  const thead = el('thead'), hr = el('tr');
+  const all = el('input'); all.type = 'checkbox';
+  all.checked = rows.every((z) => state.selected.has(z.id));
+  all.onchange = () => { rows.forEach((z) => (all.checked ? state.selected.add(z.id) : state.selected.delete(z.id))); render(); };
+  const thc = el('th', 'c'); thc.style.width = '38px'; thc.append(all); hr.append(thc);
+  hr.append(el('th', null, '도메인'));
+  hr.append(el('th', 'c', 'Scan check'));
+  hr.append(el('th', 'c', '그룹'));
+  thead.append(hr); table.append(thead);
+
+  const tb = el('tbody');
+  for (const z of rows) {
+    const tr = el('tr');
+    const tdc = el('td', 'c');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = state.selected.has(z.id);
+    cb.onchange = () => { cb.checked ? state.selected.add(z.id) : state.selected.delete(z.id); renderPanel(); };
+    tdc.append(cb); tr.append(tdc);
+
+    const tdn = el('td');
+    tdn.append(el('span', 'dname', z.name));
+    tr.append(tdn);
+
+    // Scan check 상태 — 데스크톱은 눌러서 이 도메인만 전환
+    const tds = el('td', 'c');
+    if (z.error) {
+      const c = el('span', 'chip bad', /10000|403|Authentication|permission/i.test(z.error) ? '권한 없음' : '오류');
+      c.title = z.error; tds.append(c);
+    } else if (STATE[z.scan]) {
+      tds.append(el('span', STATE[z.scan].cls, STATE[z.scan].text));
+      tds.classList.add('tgl');
+      const next = z.scan === 'on' ? false : true;
+      tds.title = z.name + ' — 누르면 ' + (next ? (z.scan === 'diff' ? '지금 조건식으로 업데이트' : 'Scan check 적용') : 'Scan check 제거');
+      tds.onclick = () => {
+        if (window.matchMedia('(max-width: 800px)').matches || state.busy) return;
+        const what = next ? (z.scan === 'diff' ? '지금 조건식으로 업데이트합니다' : 'Scan check 를 적용합니다') : 'Scan check 를 제거합니다';
+        if (!confirm(z.name + '\n' + what + '\n\n진행할까요?')) return;
+        runApply([z], next);
+      };
+    } else {
+      tds.append(el('span', 'na', '···'));
+    }
+    tr.append(tds);
+
+    tr.append(el('td', 'c', z.group || '미분류'));
+    tb.append(tr);
+  }
+  table.append(tb); card.append(table); view.append(card);
+  renderPanel();
+}
+
+// 그룹 탭 · 검색까지 걸린 목록 기준으로 필터별 개수를 센다
+function renderFilter() {
+  const box = $('#sfilter'); box.innerHTML = '';
+  const base = state.zones.filter((z) => {
+    if (query && z.name.toLowerCase().indexOf(query) === -1) return false;
+    if (state.tab === '__none__') return !z.group;
+    if (state.tab !== '__all__') return z.group === state.tab;
+    return true;
+  });
+  for (const [key, label] of [['all', '전체'], ['on', '적용'], ['off', '미적용']]) {
+    const b = el('button', state.filter === key ? 'on' : '');
+    b.append(document.createTextNode(label));
+    b.append(el('span', 'n', String(base.filter((z) => passFilter(z, key)).length)));
+    b.disabled = state.busy;
+    b.onclick = () => { state.filter = key; selectAllVisible(); render(); };
+    box.append(b);
+  }
+}
+
+function renderPanel() {
+  renderFilter();
+  const cnt = { on: 0, diff: 0, off: 0, unknown: 0 };
+  for (const z of state.zones) cnt[STATE[z.scan] ? z.scan : 'unknown']++;
+  const c = $('#counts'); c.innerHTML = '';
+  const part = (label, n) => { const s = el('span'); s.append(document.createTextNode(label + ' ')); s.append(el('b', null, String(n))); return s; };
+  c.append(part('적용', cnt.on), document.createTextNode(' · '), part('업데이트 필요', cnt.diff),
+    document.createTextNode(' · '), part('없음', cnt.off));
+  if (cnt.unknown) c.append(document.createTextNode(' · '), part('확인 전', cnt.unknown));
+
+  const sel = selectedZones();
+  const toApply = sel.filter((z) => z.scan !== 'on');
+  const toRemove = sel.filter((z) => z.scan === 'on' || z.scan === 'diff');
+  $('#applySub').innerHTML = '';
+  $('#applySub').append(el('b', null, String(sel.length)), document.createTextNode('개 도메인 중 '),
+    el('b', null, String(toApply.length)), document.createTextNode('개 바뀜'));
+  $('#removeSub').innerHTML = '';
+  $('#removeSub').append(el('b', null, String(toRemove.length)), document.createTextNode('개 도메인에서 제거'));
+  $('#btnApply').disabled = state.busy || !toApply.length;
+  $('#btnRemove').disabled = state.busy || !toRemove.length;
+  $('#btnReload').disabled = state.busy;
+}
+
+function renderAll() { renderTabs(); render(); }
+
+function setFresh(text) { $('#freshness').textContent = text; }
+
+// 일괄 적용 진행 창 (DNS · SSL/TLS 와 같음)
+function showOverlay(title, done, all) {
+  $('#ovlTitle').textContent = title;
+  const pct = all ? Math.round((done / all) * 100) : 0;
+  $('#ovlFill').style.width = pct + '%';
+  $('#ovlSub').innerHTML = '<span>' + done + ' / ' + all + ' 도메인</span><span>' + pct + '%</span>';
+  $('#ovl').classList.remove('hide');
+}
+function hideOverlay() {
+  $('#ovl').classList.add('hide');
+  $('#ovlFill').style.width = '0';
+}
+function progress(done, total) {
+  const p = $('#prog');
+  if (total == null) { p.classList.add('hide'); return; }
+  p.classList.remove('hide');
+  p.firstElementChild.style.width = Math.round((done / Math.max(total, 1)) * 100) + '%';
+}
+
+// ── 불러오기 · 상태 읽기 ────────────────────────────────────
+async function load() {
+  try {
+    const d = await api('/api/security');
+    state.zones = d.zones; state.groups = d.groups || { order: [], map: {} };
+    state.expr = d.expr; state.defaultExpr = d.defaultExpr; state.canEdit = !!d.canEdit;
+    state.maxZones = d.maxZonesPerCall || 5;
+    selectAllVisible();
+    fillExpr();
+    renderAll();
+    setFresh('도메인 ' + state.zones.length + '개');
+    await fillStatus(false);
+  } catch (e) {
+    const n = $('#notice'); n.classList.remove('hide'); n.textContent = '불러오기 실패: ' + e.message;
+    setFresh('');
+  }
+}
+
+// 각 도메인의 규칙 읽기 — 20개씩 (존마다 1회 호출)
+async function fillStatus(force) {
+  const ids = state.zones.filter((z) => force || z.stale || z.scan == null).map((z) => z.id);
+  if (!ids.length) { setFresh('도메인 ' + state.zones.length + '개'); return; }
+  state.busy = true; renderPanel();
+  let done = 0, authErr = 0;
+  try {
+    for (let i = 0; i < ids.length; i += 20) {
+      const slice = ids.slice(i, i + 20);
+      setFresh('규칙 읽는 중… ' + done + ' / ' + ids.length);
+      progress(done, ids.length);
+      const d = await post('/api/security/status', { zoneIds: slice, force: true });
+      for (const id of slice) {
+        const z = state.zones.find((x) => x.id === id);
+        const s = d.status[id];
+        if (!z || !s) continue;
+        z.scan = s.scan; z.others = s.others || []; z.error = s.error || null; z.stale = false;
+        if (z.error && /10000|403|Authentication|permission/i.test(z.error)) authErr++;
+      }
+      done += slice.length;
+      render();
+    }
+  } catch (e) {
+    alert('규칙 읽기 실패: ' + e.message);
+  } finally {
+    state.busy = false; progress(); renderPanel();
+    setFresh('도메인 ' + state.zones.length + '개');
+    if (authErr) {
+      const n = $('#notice'); n.className = 'notice amber';
+      n.textContent = authErr + '개 도메인의 규칙을 읽지 못했습니다 — 도메인 토큰에 WAF 권한(Zone · Zone WAF · Edit)을 추가해야 합니다. 대시보드 My Profile → API Tokens → 이 도구 토큰 → Edit → Add more.';
+    }
+  }
+}
+
+// ── 조건식 ────────────────────────────────────────────────
+function fillExpr() {
+  const t = $('#expr');
+  t.value = prettyExpr(state.expr);
+  t.rows = Math.min(t.value.split('\n').length + 1, 32);
+  t.disabled = !state.canEdit;
+  $('#btnExprSave').disabled = true;
+  $('#btnExprDefault').disabled = !state.canEdit || state.expr === state.defaultExpr;
+  if (!state.canEdit) setEmsg('조건식은 관리자(OTP 를 처음 등록한 사람)만 바꿀 수 있습니다.');
+}
+function setEmsg(text, cls) { const m = $('#emsg'); m.textContent = text || ''; m.className = 'emsg' + (cls ? ' ' + cls : ''); }
+const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+// 저장은 한 줄 — 보여줄 때만 바깥쪽 or 앞에서 줄바꿈 (따옴표 · 괄호 안은 그대로)
+function prettyExpr(s) {
+  const e = norm(s);
+  let out = '', depth = 0, quoted = false;
+  for (let i = 0; i < e.length; i++) {
+    const ch = e[i];
+    if (quoted) {
+      out += ch;
+      if (ch === '\\' && i + 1 < e.length) out += e[++i];
+      else if (ch === '"') quoted = false;
+      continue;
+    }
+    if (ch === '"') quoted = true;
+    else if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (depth === 0 && e.startsWith(' or ', i)) { out += '\nor '; i += 3; continue; }
+    out += ch;
+  }
+  return out;
+}
+
+$('#expr').oninput = () => {
+  const dirty = norm($('#expr').value) !== norm(state.expr);
+  $('#btnExprSave').disabled = !state.canEdit || !dirty || state.busy;
+  setEmsg(dirty ? '저장하지 않은 변경이 있습니다.' : '');
+};
+
+async function saveExpr(body, okMsg) {
+  try {
+    const d = await api('/api/security/expr', { method: 'PUT', body: JSON.stringify(body) });
+    if (d.changed) {
+      state.expr = d.expr;
+      // 조건식이 바뀌었으니 적용돼 있던 도메인은 업데이트 필요
+      for (const z of state.zones) if (z.scan === 'on') z.scan = 'diff';
+      fillExpr(); render();
+      setEmsg(okMsg, 'ok');
+    } else {
+      fillExpr(); setEmsg('바뀐 내용이 없습니다 (같은 조건식).');
+    }
+  } catch (e) {
+    setEmsg(e.message, 'bad');
+  }
+}
+$('#btnExprSave').onclick = () => {
+  const v = $('#expr').value;
+  if (!confirm('Scan check 조건식을 바꿉니다.\n\n' + prettyExpr(v) + '\n\n저장한 뒤 [Scan check 적용]을 눌러야 각 도메인에 반영됩니다. 진행할까요?')) return;
+  saveExpr({ expr: v }, '저장했습니다 — [Scan check 적용]을 눌러야 각 도메인에 반영됩니다.');
+};
+$('#btnExprDefault').onclick = () => {
+  if (!confirm('조건식을 기본값으로 되돌립니다.\n\n' + prettyExpr(state.defaultExpr) + '\n\n진행할까요?')) return;
+  saveExpr({ reset: true }, '기본값으로 되돌렸습니다 — [Scan check 적용]을 눌러야 각 도메인에 반영됩니다.');
+};
+
+// ── 적용 · 제거 ────────────────────────────────────────────
+// 도메인 maxZones 개씩. 첫 묶음이 전부 실패하면(조건식 문법 오류 · 권한 없음) 나머지는 하지 않는다
+async function runApply(zones, value) {
+  const list = zones.map((z) => ({ id: z.id, name: z.name }));
+  if (!list.length) return;
+  state.busy = true; renderPanel();
+  const title = value ? 'Scan check 적용 중…' : 'Scan check 제거 중…';
+  let changed = 0, same = 0;
+  const fails = [];
+  showOverlay(title, 0, list.length);
+  try {
+    for (let i = 0; i < list.length; i += state.maxZones) {
+      const slice = list.slice(i, i + state.maxZones);
+      const d = await post('/api/security/apply', { zones: slice, value });
+      showOverlay(title, Math.min(i + slice.length, list.length), list.length);
+      for (const r of d.result) {
+        const z = state.zones.find((x) => x.id === r.zoneId);
+        if (r.ok) {
+          if (z) { z.scan = r.scan; z.others = r.others || []; z.error = null; }
+          r.changed ? changed++ : same++;
+        } else {
+          fails.push(r.zone + ' — ' + r.error);
+          if (z) z.error = r.error;
+        }
+      }
+      render();
+      if (i === 0 && d.result.length && d.result.every((r) => !r.ok)) {
+        fails.push('(첫 묶음이 모두 실패해서 나머지 ' + (list.length - slice.length) + '개는 진행하지 않았습니다)');
+        break;
+      }
+    }
+  } catch (e) {
+    fails.push('요청 실패: ' + e.message);
+  } finally {
+    state.busy = false; hideOverlay(); renderPanel();
+  }
+  // DNS · SSL/TLS 와 같이 — 결과는 제목 아래 줄에, 실패가 있을 때만 알림창
+  setFresh((value ? 'Scan check 적용' : 'Scan check 제거') + ' 완료 — ' + changed + '개 변경' +
+    (same ? ', ' + same + '개 그대로' : '') + (fails.length ? ', ' + fails.length + '개 실패' : ''));
+  if (fails.length) alert(fails.length + '개 실패\n\n' + fails.slice(0, 20).join('\n'));
+}
+
+$('#btnApply').onclick = () => {
+  const zs = selectedZones().filter((z) => z.scan !== 'on');
+  if (!zs.length) return;
+  if (!confirm('체크한 도메인 중 ' + zs.length + '개에 Scan check 를 적용합니다 (이미 있으면 지금 조건식으로 업데이트).\n\n' + state.expr + '\n\n진행할까요?')) return;
+  runApply(zs, true);
+};
+$('#btnRemove').onclick = () => {
+  const zs = selectedZones().filter((z) => z.scan === 'on' || z.scan === 'diff');
+  if (!zs.length) return;
+  if (!confirm('체크한 도메인 중 ' + zs.length + '개에서 Scan check 를 제거합니다. 다른 규칙은 그대로 둡니다.\n\n진행할까요?')) return;
+  runApply(zs, false);
+};
+$('#btnReload').onclick = () => { if (!state.busy) fillStatus(true); };
+
+$('#q').oninput = () => { query = $('#q').value.trim().toLowerCase(); selectAllVisible(); render(); };
+$('#q').onkeydown = (e) => { if (e.key === 'Escape') { $('#q').value = ''; $('#q').oninput(); } };
+
+load();
+</script>
+</body>
+</html>

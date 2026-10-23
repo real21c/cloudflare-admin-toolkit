@@ -2,7 +2,7 @@
 //
 //   비밀키 20바이트(base32) · HMAC-SHA1 · 30초 · 6자리 — 구글 OTP 앱 기본값
 //
-// 이 파일은 계산만 한다. 사람별 등록·사용중지와 KV 키는 otp.js,
+// 이 파일은 계산만 한다. 사람별 등록·사용중지와 저장 키는 otp.js,
 // 세션(epoch · gen)은 auth.js / worker.js 참고.
 
 import qrcode from './vendor/qrcode.mjs';
