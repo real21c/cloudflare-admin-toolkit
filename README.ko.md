@@ -13,6 +13,8 @@
 
 ![DNS · SSL/TLS — 그룹 단위 프록시/SSL 일괄 전환, 캐시 규칙 · Tiered Cache](docs/domains.png)
 
+![Security — Scan check 규칙을 모든 도메인에 한 번에 적용 · 업데이트](docs/security.png)
+
 ![IP Rules — 수천 개 IP Access Rules 조회 · 분류 · 일괄 관리](docs/ip-rules.png)
 
 ---

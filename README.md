@@ -15,6 +15,8 @@ It runs on your own Cloudflare Workers (free plan works). No external server, ze
 
 ![DNS · SSL/TLS — bulk proxy/SSL switching per group, with cache rules and Tiered Cache](docs/domains.png)
 
+![Security — apply and update the Scan check rule on every zone at once](docs/security.png)
+
 ![IP Rules — browse, classify and bulk-manage thousands of IP Access Rules](docs/ip-rules.png)
 
 ---
