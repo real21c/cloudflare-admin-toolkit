@@ -4,7 +4,7 @@
 import {
   createClient, pool, resolveScope, proxySummary, shortName,
   proxyWarning, collectIps, recordOrder, SSL_LABEL, nowStamp, CACHE_RULE_DESC, CACHE_RULE_EXPR,
-  SCAN_RULE_DESC, DEFAULT_SCAN_EXPR, normExpr, scanState, otherRules, validateScanExpr,
+  WAF_RULES, normExpr, ruleState, otherRules, validateScanExpr,
 } from './core.js';
 import { createIpApi } from './ip-api.js';
 import { createStoreData } from './log-store.js';
@@ -571,30 +571,54 @@ export function createApi({ store, config, data }) {
       return { status: 200, body: { config: out, fetched: need.length } };
     }
 
-    // ── Security — Scan check (WAF 사용자 정의 규칙) ─────────────
+    // ── Security — Scan check · Crawler check (WAF 사용자 정의 규칙) ─────────────
+    // 규칙은 키로 고른다(rule = scan | crawler, 없으면 scan). 존마다 규칙 목록을 한 번 읽어 두 규칙 상태를 함께 계산한다.
+    // 캐시: scan · crawler(상태) · scanExpr · crawlerExpr(그때의 조건식) · scanOthers(다른 규칙) · scanAt(읽은 시각)
     if (path.startsWith('/api/security')) {
-      const getExpr = async () => normExpr((await store.get('scan:expr', null)) || DEFAULT_SCAN_EXPR);
+      const KEYS = Object.keys(WAF_RULES);
+      const ruleKey = (method === 'GET' ? query.get('rule') : body && body.rule) || 'scan';
+      if (!WAF_RULES[ruleKey]) return { status: 400, body: { error: '알 수 없는 규칙: ' + ruleKey } };
+      const R = WAF_RULES[ruleKey];
+      const getExpr = async (k) => normExpr((await store.get(k + ':expr', null)) || WAF_RULES[k].defaultExpr);
+      const getExprs = async () => { const o = {}; for (const k of KEYS) o[k] = await getExpr(k); return o; };
+      // 규칙 목록 → 캐시에 넣을 값 (두 규칙 다)
+      const cacheOf = (rules, exprs) => {
+        const v = { scanOthers: otherRules(rules), scanAt: Date.now() };
+        for (const k of KEYS) { v[k] = ruleState(rules, WAF_RULES[k].name, exprs[k]); v[k + 'Expr'] = exprs[k]; }
+        return v;
+      };
+      // 캐시 → 화면 상태. 조건식을 바꾼 뒤에는 그 전에 'on' 이었던 존도 지금 식과 다르다
+      const statesOf = (c, exprs) => {
+        const o = {};
+        for (const k of KEYS) {
+          let s = c.scanAt && c[k] != null ? c[k] : null;
+          if (s === 'on' && normExpr(c[k + 'Expr']) !== exprs[k]) s = 'diff';
+          o[k] = s;
+        }
+        return o;
+      };
 
-      // 화면 — 조건식 + 도메인 전체 + 마지막으로 읽은 상태
+      // 화면 — 규칙별 조건식 + 도메인 전체 + 마지막으로 읽은 상태
       if (path === '/api/security' && method === 'GET') {
-        const [zones, cache, expr, groups] = await Promise.all([
-          cf.listZones(), getCache(), getExpr(), store.get('groups', { order: [], map: {} }),
+        const [zones, cache, exprs, groups] = await Promise.all([
+          cf.listZones(), getCache(), getExprs(), store.get('groups', { order: [], map: {} }),
         ]);
+        const rules = {};
+        for (const k of KEYS) rules[k] = { name: WAF_RULES[k].name, expr: exprs[k], defaultExpr: WAF_RULES[k].defaultExpr };
         return {
           status: 200,
           body: {
-            expr, defaultExpr: DEFAULT_SCAN_EXPR, ruleName: SCAN_RULE_DESC, canEdit: !!config.canAdmin,
-            maxZonesPerCall: config.maxZonesPerCall, groups,
+            rules, canEdit: !!config.canAdmin, maxZonesPerCall: config.maxZonesPerCall, groups,
+            // 예전 화면 · 시험용 — Scan check 값
+            expr: exprs.scan, defaultExpr: WAF_RULES.scan.defaultExpr, ruleName: WAF_RULES.scan.name,
             zones: zones.map((z) => {
               const c = cache[z.id] || {};
-              let scan = c.scanAt ? c.scan : null;
-              // 조건식을 바꾼 뒤에는 그 전에 'on' 이었던 존도 지금 식과 다르다
-              if (scan === 'on' && normExpr(c.scanExpr) !== expr) scan = 'diff';
-              return {
+              return Object.assign({
                 id: z.id, name: z.name, group: groups.map[z.name] || null,
-                scan, others: c.scanOthers || [], scanAt: c.scanAt || null,
-                stale: !c.scanAt || Date.now() - c.scanAt >= CFG_TTL,
-              };
+                others: c.scanOthers || [], scanAt: c.scanAt || null,
+                // Crawler check 가 생기기 전에 읽은 캐시도 다시 읽는다
+                stale: !c.scanAt || c.crawler === undefined || Date.now() - c.scanAt >= CFG_TTL,
+              }, statesOf(c, exprs));
             }),
           },
         };
@@ -602,47 +626,46 @@ export function createApi({ store, config, data }) {
 
       // 상태 읽기 — 존마다 1회 호출. 하루 지난 것만, force 면 전부
       if (path === '/api/security/status' && method === 'POST') {
-        const expr = await getExpr();
+        const exprs = await getExprs();
         const ids = body.zoneIds || [];
         const cache = await getCache();
-        const need = body.force ? ids : ids.filter((id) => !(cache[id] && cache[id].scanAt) || Date.now() - cache[id].scanAt >= CFG_TTL);
+        const need = body.force ? ids : ids.filter((id) => !(cache[id] && cache[id].scanAt) || cache[id].crawler === undefined || Date.now() - cache[id].scanAt >= CFG_TTL);
         const outs = await pool(need, (id) => cf.getFirewallRules(id), config.concurrency);
         const out = {};
         const upd = {};
         for (let i = 0; i < need.length; i++) {
           const id = need[i];
           if (outs[i].ok) {
-            const rules = outs[i].value;
-            const v = { scan: scanState(rules, expr), scanOthers: otherRules(rules), scanExpr: expr, scanAt: Date.now() };
+            const v = cacheOf(outs[i].value, exprs);
             upd[id] = v;
-            out[id] = { scan: v.scan, others: v.scanOthers, scanAt: v.scanAt };
+            out[id] = Object.assign({ others: v.scanOthers, scanAt: v.scanAt }, statesOf(v, exprs));
           } else {
-            out[id] = { scan: null, others: [], error: String(outs[i].error.message || outs[i].error) };
+            const nul = {}; for (const k of KEYS) nul[k] = null;
+            out[id] = Object.assign(nul, { others: [], error: String(outs[i].error.message || outs[i].error) });
           }
         }
         if (Object.keys(upd).length) await putCacheEntries(upd);
-        // 다시 읽지 않은 존 — 캐시 값 (그 사이 조건식이 바뀌었으면 on 도 diff 로)
+        // 다시 읽지 않은 존 — 캐시 값
         for (const id of ids) {
           if (out[id]) continue;
           const c = cache[id] || {};
-          let s = c.scan;
-          if (s === 'on' && normExpr(c.scanExpr) !== expr) s = 'diff';
-          out[id] = { scan: s == null ? null : s, others: c.scanOthers || [], scanAt: c.scanAt || null };
+          out[id] = Object.assign({ others: c.scanOthers || [], scanAt: c.scanAt || null }, statesOf(c, exprs));
         }
         return { status: 200, body: { status: out, fetched: need.length } };
       }
 
       // 적용 / 제거 — value true = 지금 조건식으로 넣기(있으면 교체), false = 빼기. 존마다 읽기 1 + 쓰기 1
       if (path === '/api/security/apply' && method === 'POST') {
-        const expr = await getExpr();
+        const exprs = await getExprs();
+        const expr = exprs[ruleKey];
         const value = !!body.value;
         const zones = body.zones || [];
         const outs = await pool(zones, async (z) => {
           const cur = await cf.getFirewallRules(z.id);
-          const before = scanState(cur, expr);
+          const before = ruleState(cur, R.name, expr);
           if (value ? before === 'on' : before === 'off') return { before, after: before, changed: false, rules: cur };
-          const rules = await cf.setScanRule(z.id, value, expr, cur);
-          return { before, after: scanState(rules, expr), changed: true, rules };
+          const rules = await cf.setWafRule(z.id, R.name, value, expr, cur);
+          return { before, after: ruleState(rules, R.name, expr), changed: true, rules };
         }, config.concurrency);
 
         const result = [];
@@ -654,12 +677,12 @@ export function createApi({ store, config, data }) {
           const o = outs[i];
           if (!o.ok) { result.push({ zone: z.name, zoneId: z.id, ok: false, error: String(o.error.message || o.error) }); continue; }
           const v = o.value;
-          upd[z.id] = { scan: v.after, scanOthers: otherRules(v.rules), scanExpr: expr, scanAt: Date.now() };
-          result.push({ zone: z.name, zoneId: z.id, ok: true, changed: v.changed, scan: v.after, others: otherRules(v.rules) });
+          upd[z.id] = cacheOf(v.rules, exprs);
+          result.push(Object.assign({ zone: z.name, zoneId: z.id, ok: true, changed: v.changed, others: otherRules(v.rules) }, statesOf(upd[z.id], exprs)));
           if (v.changed) {
             logEntries.push({
-              id: rid(), ts: nowStamp(), zone: z.name, zoneId: z.id, action: 'scan',
-              label: SCAN_RULE_DESC + ' ' + (value ? (v.before === 'diff' ? '업데이트' : '적용') : '제거') +
+              id: rid(), ts: nowStamp(), zone: z.name, zoneId: z.id, action: ruleKey,
+              label: R.name + ' ' + (value ? (v.before === 'diff' ? '업데이트' : '적용') : '제거') +
                 ' (' + word[v.before] + ' → ' + word[v.after] + ')',
             });
           }
@@ -673,14 +696,14 @@ export function createApi({ store, config, data }) {
       if (path === '/api/security/expr' && method === 'PUT') {
         if (!config.canAdmin) return { status: 403, body: { error: '조건식은 관리자만 바꿀 수 있습니다.' } };
         let next;
-        try { next = body.reset ? DEFAULT_SCAN_EXPR : validateScanExpr(body.expr); }
+        try { next = body.reset ? R.defaultExpr : validateScanExpr(body.expr); }
         catch (e) { return { status: 400, body: { error: e.message } }; }
-        const before = await getExpr();
+        const before = await getExpr(ruleKey);
         if (normExpr(next) === before) return { status: 200, body: { expr: before, changed: false } };
-        await store.put('scan:expr', normExpr(next));
+        await store.put(ruleKey + ':expr', normExpr(next));
         await appendLog([{
-          id: rid(), ts: nowStamp(), zone: 'Security', zoneId: '', action: 'scan-expr',
-          label: SCAN_RULE_DESC + ' 조건식 변경: ' + before + ' → ' + normExpr(next),
+          id: rid(), ts: nowStamp(), zone: 'Security', zoneId: '', action: ruleKey + '-expr',
+          label: R.name + ' 조건식 변경: ' + before + ' → ' + normExpr(next),
         }]);
         return { status: 200, body: { expr: normExpr(next), changed: true } };
       }

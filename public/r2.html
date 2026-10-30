@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R2 Clean up · Cloudflare Admin Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shell.css">
+<style>
+  /* 터미널 모양 — 테마(라이트/다크)와 상관없이 늘 어두운 화면. 용도마다 창 하나 */
+  .term {
+    --t-bg: #0f0f0f; --t-line: #2a2a2a; --t-text: #d6d6d6; --t-dim: #7a7a7a;
+    --t-green: #5fd38d; --t-amber: #e6b450; --t-blue: #7fb4ff;
+    background: var(--t-bg); color: var(--t-text); border: 1px solid #000;
+    font: 13px/1.7 ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+    margin-bottom: 16px;
+  }
+  .t-bar {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    border-bottom: 1px solid var(--t-line); color: var(--t-dim); font-size: 12px;
+  }
+  .t-bar b { color: var(--t-text); font-weight: 600; }
+  .t-use { color: var(--t-dim); margin-bottom: 8px; }
+  .t-use::before { content: "# "; }
+  .t-bar .grow { flex: 1; }
+  .t-body { padding: 12px 14px 14px; }
+
+  /* 공통 값 표 — 세 창이 같이 쓴다 */
+  .t-tbl { width: 100%; border-collapse: collapse; }
+  .t-tbl th { text-align: left; font-weight: 400; color: var(--t-dim); font-size: 12px; padding: 6px 14px; border-bottom: 1px solid var(--t-line); }
+  .t-tbl td { padding: 5px 14px; border-bottom: 1px solid #1c1c1c; vertical-align: top; }
+  .t-tbl tbody tr:last-child td { border-bottom: none; }
+  .t-tbl td.k { color: var(--t-blue); white-space: nowrap; width: 1%; }
+  .t-tbl td.v { white-space: nowrap; width: 1%; }
+  .t-tbl td.d { color: var(--t-dim); }
+  .t-tbl td.d code { font: inherit; color: var(--t-text); }
+  .t-tbl .fix { color: var(--t-dim); }
+  .t-tbl input {
+    font: inherit; color: var(--t-amber); background: transparent; border: none;
+    border-bottom: 1px solid var(--t-line); padding: 0 2px; height: 22px; min-width: 3ch;
+  }
+  .t-tbl input:focus { outline: none; border-bottom-color: var(--t-amber); }
+
+  .t-cm { color: var(--t-dim); margin-top: 8px; }
+  .t-ln { display: flex; align-items: flex-start; gap: 10px; padding: 1px 0; }
+  .t-ln:hover { background: #1a1a1a; }
+  .t-ln .p { color: var(--t-green); user-select: none; flex: none; }
+  .t-ln code { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-all; font: inherit; color: var(--t-text); }
+  .t-ln button {
+    flex: none; font: 11.5px ui-monospace, Consolas, monospace; color: var(--t-dim);
+    background: transparent; border: 1px solid var(--t-line); padding: 0 8px; height: 22px; cursor: pointer;
+  }
+  .t-ln button:hover { color: var(--t-text); border-color: var(--t-dim); }
+  .t-ln button.ok { color: var(--t-green); border-color: var(--t-green); }
+  .t-empty { color: var(--t-dim); }
+  /* 명령 색 — rclone · for 는 초록, move 는 흰색 굵게, 경로는 노랑, 옵션은 파랑, 따옴표 값은 보라 */
+  .c-cmd { color: var(--t-green); }
+  .c-kw { color: var(--t-green); }
+  .c-sub { color: #fff; font-weight: 700; }
+  .c-path { color: var(--t-amber); }
+  .c-flag { color: var(--t-blue); }
+  .c-str { color: #c792ea; }
+  .c-num { color: #f78c6c; }
+
+  @media (max-width: 800px) {
+    .wrap { padding: 14px 10px; }
+    .term { font-size: 12px; }
+    .t-body { padding: 10px; }
+    .t-tbl td, .t-tbl th { padding-left: 10px; padding-right: 10px; }
+    .t-tbl td.v { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#f6821f" d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+    </svg>
+    Cloudflare Admin Toolkit
+  </span>
+  <span class="grow"></span>
+  <button class="tiny hide" id="btnOtp">2단계 인증</button>
+  <button class="tiny hide" id="btnLogout">로그아웃</button>
+</div>
+
+<div class="app">
+<nav id="side" class="side"></nav>
+<main class="main">
+<div class="wrap">
+  <h1>R2 Clean up</h1>
+  <div class="sub">공통 값을 바꾸면 세 창의 명령이 같이 바뀝니다. 필요한 줄만 복사해서 PC 에서 실행하세요. 이 화면은 R2 를 직접 바꾸지 않습니다.</div>
+
+  <div class="term">
+    <div class="t-bar"><b>공통 값</b><span class="grow"></span><span>세 창이 같이 씀</span></div>
+    <table class="t-tbl">
+      <thead><tr><th>항목</th><th>값</th><th>설명</th></tr></thead>
+      <tbody>
+        <tr><td class="k">remote</td><td class="v"><span class="fix">r2</span></td><td class="d">rclone 에 등록한 R2 이름 (고정)</td></tr>
+        <tr><td class="k">bucket</td><td class="v"><input data-k="bucket" data-def="media" spellcheck="false"></td><td class="d">옮길 버킷</td></tr>
+        <tr><td class="k">folders</td><td class="v"><input data-k="folders" data-def="05 08 09" spellcheck="false"></td><td class="d">옮길 폴더 — 여러 개는 띄어쓰기. "폴더 하나" 창은 첫 번째만</td></tr>
+        <tr><td class="k">trash</td><td class="v"><input data-k="trash" data-def="trash" spellcheck="false"></td><td class="d">휴지통 버킷</td></tr>
+        <tr><td class="k">prefix</td><td class="v"><input data-k="prefix" data-def="_" spellcheck="false"></td><td class="d">휴지통 안 폴더 이름 앞 글자 (media → _media)</td></tr>
+        <tr><td class="k">flags</td><td class="v"><input data-k="flags" data-def="--progress --transfers 32" spellcheck="false"></td><td class="d"><code>--progress</code> 진행률 표시 · <code>--transfers 32</code> 동시에 32개씩 (기본 4, 너무 크면 R2 가 잠시 거절하거나 PC 가 버거울 수 있음)</td></tr>
+        <tr><td class="k"></td><td class="v"><span class="fix">--delete-empty-src-dirs</span></td><td class="d">옮긴 뒤 원래 자리에 남은 빈 폴더 삭제 (고정)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="term cmdwin">
+    <div class="t-bar"><b>폴더 하나 옮기기</b><span class="grow"></span><span>cmd</span></div>
+    <div class="t-body">
+      <div class="t-use">폴더 하나만 옮길 때</div>
+      <div class="t-out"></div>
+    </div>
+  </div>
+
+  <div class="term cmdwin">
+    <div class="t-bar"><b>여러 폴더 옮기기 — include</b><span class="grow"></span><span>cmd</span></div>
+    <div class="t-body">
+      <div class="t-use">여러 폴더를 한 번에 빠르게 옮길 때 (추천) · cmd · PowerShell 둘 다 됨</div>
+      <div class="t-out"></div>
+    </div>
+  </div>
+
+  <div class="term cmdwin">
+    <div class="t-bar"><b>여러 폴더 옮기기 — for</b><span class="grow"></span><span>cmd</span></div>
+    <div class="t-body">
+      <div class="t-use">여러 폴더를 하나씩 차례로 옮길 때 · cmd 창 전용</div>
+      <div class="t-out"></div>
+    </div>
+  </div>
+
+</div>
+</main>
+</div>
+
+<script type="module">
+import { el } from '/shell.js';
+
+const j = (...a) => a.filter(Boolean).join(' ');
+
+// 창마다 만드는 명령 줄
+const list = (v) => (v || '').split(/\s+/).filter(Boolean).map((f) => f.replace(/^\/+|\/+$/g, ''));
+const src = (o, f) => o.remote + ':' + o.bucket + (f ? '/' + f : '');
+const dst = (o, f) => o.remote + ':' + (o.trash || 'trash') + '/' + o.prefix + o.bucket + (f ? '/' + f : '');
+const DEL = '--delete-empty-src-dirs'; // 옮긴 뒤 원래 자리에 남은 빈 폴더도 지운다
+const BUILD = [
+  // 폴더 하나
+  (o) => (o.bucket && o.folder ? j('rclone move', src(o, list(o.folder)[0]), dst(o, list(o.folder)[0]), o.flags, DEL) : null),
+  // 여러 폴더 — include
+  (o) => {
+    const fs = list(o.folders);
+    return o.bucket && fs.length ? j('rclone move', src(o), dst(o), ...fs.map((f) => '--include "/' + f + '/**"'), o.flags, DEL) : null;
+  },
+  // 여러 폴더 — for (cmd)
+  (o) => {
+    const fs = list(o.folders);
+    return o.bucket && fs.length ? j('for %f in (' + fs.join(' ') + ') do rclone move', src(o, '%f'), dst(o, '%f'), o.flags, DEL) : null;
+  },
+];
+const EMPTY = ['# bucket 과 folders 를 입력하세요', '# bucket 과 folders 를 입력하세요', '# bucket 과 folders 를 입력하세요'];
+
+// 맨 위 값 — 이 브라우저에 기억해 둔다 (막혀 있으면 기본값). remote 는 r2 고정
+const inputs = [...document.querySelectorAll('.t-tbl input[data-k]')];
+let saved = {};
+try { saved = JSON.parse(localStorage.getItem('r2.vars') || '{}') || {}; } catch { saved = {}; }
+const fit = (x) => { x.style.width = Math.max(3, x.value.length + 1) + 'ch'; };
+const read = () => {
+  const o = { remote: 'r2' };
+  for (const x of inputs) o[x.dataset.k] = x.value.trim();
+  o.folder = list(o.folders)[0] || ''; // 폴더 하나 창은 첫 번째 폴더
+  return o;
+};
+const wins = [...document.querySelectorAll('.term.cmdwin')];
+function render() {
+  const o = read();
+  wins.forEach((w, i) => {
+    const out = w.querySelector('.t-out'); out.innerHTML = '';
+    const line = BUILD[i](o);
+    out.append(line ? row(line) : el('div', 't-empty', EMPTY[i]));
+  });
+}
+for (const x of inputs) {
+  x.value = saved[x.dataset.k] != null ? saved[x.dataset.k] : x.dataset.def;
+  fit(x);
+  x.oninput = () => {
+    fit(x);
+    try { localStorage.setItem('r2.vars', JSON.stringify(Object.fromEntries(inputs.map((y) => [y.dataset.k, y.value])))); } catch { /* 무시 */ }
+    render();
+  };
+}
+
+// 명령 줄 색칠 — 화면 표시만 바꾸고, 복사는 원래 줄 그대로
+function paint(line) {
+  const code = el('code');
+  const toks = line.match(/"[^"]*"|\s+|[^\s"]+/g) || [];
+  let prev = '';
+  for (const t of toks) {
+    if (/^\s+$/.test(t)) { code.append(t); continue; }
+    let c = null;
+    if (t === 'rclone') c = 'c-cmd';
+    else if (t === 'for' || t === 'in' || t === 'do') c = 'c-kw';
+    else if (prev === 'rclone') c = 'c-sub';
+    else if (t.startsWith('--')) c = 'c-flag';
+    else if (t.startsWith('"')) c = 'c-str';
+    else if (t.includes(':')) c = 'c-path';
+    else if (/^\(?[\w%.-]+\)?$/.test(t) && prev.startsWith('--')) c = 'c-num';
+    code.append(c ? el('span', c, t) : t);
+    prev = t;
+  }
+  return code;
+}
+
+function row(line) {
+  const d = el('div', 't-ln');
+  const cp = el('button', null, '복사');
+  cp.onclick = async () => {
+    try { await navigator.clipboard.writeText(line); cp.textContent = '복사됨'; cp.classList.add('ok'); }
+    catch { cp.textContent = '실패'; }
+    setTimeout(() => { cp.textContent = '복사'; cp.classList.remove('ok'); }, 1500);
+  };
+  d.append(el('span', 'p', '$'), paint(line), cp);
+  return d;
+}
+render();
+</script>
+</body>
+</html>

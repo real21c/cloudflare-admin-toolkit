@@ -83,33 +83,48 @@ export function buildCacheRule(name = CACHE_RULE_DESC) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Scan check — 취약점 스캔(.env · .git 같은 민감 경로 찔러보기)을 엣지에서 차단하는 WAF 사용자 정의 규칙
-//   존마다 http_request_firewall_custom 단계에 우리 규칙 하나만 넣고 뺀다. 다른 규칙(Bot check 등)은 순서까지 그대로 둔다.
-//   조건식은 Security 화면에서 고친다(저장소 scan:expr). 고친 뒤 [적용] 해야 각 존에 반영된다.
+// Security — 이 도구가 관리하는 WAF 사용자 정의 규칙 (동작 Block)
+//   Scan check    취약점 스캔(.env · .git 같은 민감 경로 찔러보기)을 엣지에서 차단
+//   Crawler check 정해 둔 User-Agent 로 들어오는 크롤러 · 스캐너를 차단
+//   존마다 http_request_firewall_custom 단계에 규칙 하나씩 넣고 뺀다. 다른 규칙(Bot check 등)은 순서까지 그대로 둔다.
+//   조건식은 Security 화면에서 고친다(저장소 scan:expr · crawler:expr). 고친 뒤 [적용] 해야 각 존에 반영된다.
 //   도구가 이 이름으로 자기 규칙을 찾으므로 이름은 바꾸지 않는다.
 // ─────────────────────────────────────────────────────────────
 export const SCAN_RULE_DESC = 'Scan check';
+export const CRAWLER_RULE_DESC = 'Crawler check';
 export const SCAN_PHASE = 'http_request_firewall_custom';
 export const DEFAULT_SCAN_EXPR =
   '(http.request.uri.path contains "/.env") or (http.request.uri.path contains "/.git")';
+// 기본값은 이름이 분명한 스캐너 도구만 — 막을 크롤러는 각자 트래픽을 보고 정한다
+export const DEFAULT_CRAWLER_EXPR =
+  '(http.user_agent contains "zgrab") or (http.user_agent contains "Nuclei")';
+
+// 규칙 키 → 이름 · 기본 조건식 (키는 저장소 · 캐시 · 이력 이름에도 쓴다)
+export const WAF_RULES = {
+  scan: { name: SCAN_RULE_DESC, defaultExpr: DEFAULT_SCAN_EXPR },
+  crawler: { name: CRAWLER_RULE_DESC, defaultExpr: DEFAULT_CRAWLER_EXPR },
+};
+const OUR_RULE_NAMES = Object.values(WAF_RULES).map((r) => r.name);
 
 export const normExpr = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
-export function buildScanRule(expr) {
-  return { action: 'block', description: SCAN_RULE_DESC, enabled: true, expression: normExpr(expr) };
+export function buildWafRule(name, expr) {
+  return { action: 'block', description: name, enabled: true, expression: normExpr(expr) };
 }
+export const buildScanRule = (expr) => buildWafRule(SCAN_RULE_DESC, expr);
 
 // 존의 규칙 목록 → 우리 규칙 상태. 'on' 지금 조건 그대로 · 'diff' 있는데 조건 · 동작이 다르거나 꺼짐 · 'off' 없음
-export function scanState(rules, expr) {
-  const mine = rules.find((r) => r.description === SCAN_RULE_DESC);
+export function ruleState(rules, name, expr) {
+  const mine = rules.find((r) => r.description === name);
   if (!mine) return 'off';
   const same = mine.action === 'block' && mine.enabled !== false && normExpr(mine.expression) === normExpr(expr);
   return same ? 'on' : 'diff';
 }
+export const scanState = (rules, expr) => ruleState(rules, SCAN_RULE_DESC, expr);
 
-// 화면에 보여 줄 다른 규칙 (이름 · 동작 · 켜짐)
+// 화면에 보여 줄 다른 규칙 (이름 · 동작 · 켜짐) — 이 도구의 규칙은 뺀다
 export const otherRules = (rules) =>
-  rules.filter((r) => r.description !== SCAN_RULE_DESC)
+  rules.filter((r) => !OUR_RULE_NAMES.includes(r.description))
     .map((r) => ({ name: r.description || '(이름 없음)', action: r.action, enabled: r.enabled !== false }));
 
 // 조건식 저장 전 검사 — Cloudflare 문법 검사는 적용할 때 Cloudflare 가 한다.
@@ -351,18 +366,18 @@ export function createClient(token) {
       }
     },
 
-    // Scan check 만 넣거나(있으면 그 자리에서 교체) 뺀다. 다른 규칙은 순서까지 그대로 둔다.
+    // 우리 규칙 하나(name)만 넣거나(있으면 그 자리에서 교체) 뺀다. 다른 규칙은 순서까지 그대로 둔다.
     // cur — 방금 읽은 규칙 목록 (다시 읽지 않게)
-    async setScanRule(zoneId, enable, expr, cur) {
-      const i = cur.findIndex((r) => r.description === SCAN_RULE_DESC);
+    async setWafRule(zoneId, name, enable, expr, cur) {
+      const i = cur.findIndex((r) => r.description === name);
       let rules;
       if (enable) {
         rules = cur.slice();
-        const mine = buildScanRule(expr);
+        const mine = buildWafRule(name, expr);
         if (i === -1) rules.push(mine);
         else rules[i] = Object.assign({ id: cur[i].id }, mine);
       } else {
-        rules = cur.filter((r) => r.description !== SCAN_RULE_DESC);
+        rules = cur.filter((r) => r.description !== name);
       }
       const j = await call('/zones/' + zoneId + '/rulesets/phases/' + SCAN_PHASE + '/entrypoint', {
         method: 'PUT',

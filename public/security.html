@@ -56,6 +56,10 @@
   #expr:focus-visible { outline: 2px solid var(--cf-blue); outline-offset: 1px; }
   #expr:disabled { color: var(--dim); background: var(--bg); }
   .erow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .seg.rsel { align-self: flex-start; margin-bottom: 0; }
+  .esum { font-size: 13px; }
+  .esum b { font-variant-numeric: tabular-nums; }
+  .esum .dim { color: var(--dim); }
   .emsg { font-size: 12.5px; color: var(--dim); margin-right: auto; }
   .emsg.ok { color: var(--green); }
   .emsg.bad { color: var(--red); }
@@ -168,15 +172,29 @@
 
   <div class="panel">
     <div class="prow">
-      <span class="plabel">Scan check 조건</span>
+      <span class="plabel">규칙</span>
       <div class="pbody">
-        <textarea id="expr" spellcheck="false" disabled></textarea>
+        <div class="seg rsel" id="rsel"></div>
+        <div class="phint" id="rhint"></div>
+      </div>
+    </div>
+    <div class="prow">
+      <span class="plabel" id="exprLabel">조건</span>
+      <div class="pbody">
         <div class="erow">
-          <span class="emsg" id="emsg"></span>
-          <button class="ghost tiny" id="btnExprDefault" disabled>기본값으로</button>
-          <button class="tiny" id="btnExprSave" disabled>조건식 저장</button>
+          <span class="esum" id="esum"></span>
+          <button class="ghost tiny" id="btnExprToggle">조건식 펼치기 ▾</button>
         </div>
-        <div class="phint">각 도메인의 WAF 사용자 정의 규칙 <b>Scan check</b> (동작 Block). 조건식을 바꾸면 저장한 뒤 아래 <b>Scan check 적용</b>을 눌러야 도메인에 반영됩니다. 다른 규칙(Bot check 등)은 건드리지 않습니다.</div>
+        <!-- 평소엔 접어 둔다 — 조건이 수십 줄이라 펼쳐 두면 도메인 목록이 밀려난다 -->
+        <div class="pbody hide" id="exprBox">
+          <textarea id="expr" spellcheck="false" disabled></textarea>
+          <div class="erow">
+            <span class="emsg" id="emsg"></span>
+            <button class="ghost tiny" id="btnExprDefault" disabled>기본값으로</button>
+            <button class="tiny" id="btnExprSave" disabled>조건식 저장</button>
+          </div>
+          <div class="phint">조건식을 바꾸면 저장한 뒤 아래 <b>적용</b>을 눌러야 도메인에 반영됩니다.</div>
+        </div>
       </div>
     </div>
     <div class="prow">
@@ -185,11 +203,11 @@
         <div class="counts" id="counts"></div>
         <div class="actrow">
           <button class="act on" id="btnApply" disabled>
-            <span class="actmain">Scan check 적용</span>
+            <span class="actmain" id="applyMain">적용</span>
             <span class="actsub" id="applySub"></span>
           </button>
           <button class="act off" id="btnRemove" disabled>
-            <span class="actmain">Scan check 제거</span>
+            <span class="actmain" id="removeMain">제거</span>
             <span class="actsub" id="removeSub"></span>
           </button>
         </div>
@@ -213,12 +231,24 @@
 <script type="module">
 import { $, el, setBusyCheck } from '/shell.js';
 
+// 규칙 — Scan check · Crawler check. 화면은 하나, 위에서 고른 규칙만 보여 주고 바꾼다
+const RULE_KEYS = ['scan', 'crawler'];
+const RULE_HINT = {
+  scan: '<b>Scan check</b> — <code>.env</code> · <code>.git</code> 같은 스캔 경로로 들어오는 요청을 막습니다. 각 도메인의 WAF 사용자 정의 규칙(동작 Block)이고, 다른 규칙(Bot check 등)은 건드리지 않습니다.',
+  crawler: '<b>Crawler check</b> — 정해 둔 User-Agent 로 들어오는 크롤러 · 스캐너를 막습니다. 각 도메인의 WAF 사용자 정의 규칙(동작 Block)이고, 다른 규칙(Bot check 등)은 건드리지 않습니다.',
+};
+const savedRule = (() => { try { return localStorage.getItem('security.rule'); } catch { return null; } })();
+
 const state = {
-  zones: [], groups: { order: [], map: {} }, expr: '', defaultExpr: '', canEdit: false,
+  zones: [], groups: { order: [], map: {} }, rules: {}, rule: RULE_KEYS.includes(savedRule) ? savedRule : 'scan',
+  exprOpen: false, canEdit: false,
   maxZones: 5, tab: '__all__', filter: 'all', selected: new Set(), busy: false,
 };
 let query = '';
 setBusyCheck(() => state.busy);
+// 지금 고른 규칙의 이름 · 조건식, 도메인의 그 규칙 상태
+const cur = () => state.rules[state.rule] || { name: '', expr: '', defaultExpr: '' };
+const st = (z) => z[state.rule];
 
 async function api(path, opt) {
   const r = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opt || {}));
@@ -239,7 +269,7 @@ const STATE = {
 function groupNames() { return state.groups.order.slice(); }
 
 // 상태 필터 — 미적용 = 없음 · 업데이트 필요 · 확인 전 (적용이 아닌 것 전부)
-const passFilter = (z, f) => (f === 'on' ? z.scan === 'on' : f === 'off' ? z.scan !== 'on' : true);
+const passFilter = (z, f) => (f === 'on' ? st(z) === 'on' : f === 'off' ? st(z) !== 'on' : true);
 
 function visibleZones() {
   return state.zones.filter((z) => {
@@ -282,7 +312,7 @@ function render() {
   all.onchange = () => { rows.forEach((z) => (all.checked ? state.selected.add(z.id) : state.selected.delete(z.id))); render(); };
   const thc = el('th', 'c'); thc.style.width = '38px'; thc.append(all); hr.append(thc);
   hr.append(el('th', null, '도메인'));
-  hr.append(el('th', 'c', 'Scan check'));
+  hr.append(el('th', 'c', cur().name));
   hr.append(el('th', 'c', '그룹'));
   thead.append(hr); table.append(thead);
 
@@ -298,19 +328,20 @@ function render() {
     tdn.append(el('span', 'dname', z.name));
     tr.append(tdn);
 
-    // Scan check 상태 — 데스크톱은 눌러서 이 도메인만 전환
+    // 고른 규칙의 상태 — 데스크톱은 눌러서 이 도메인만 전환
     const tds = el('td', 'c');
+    const s = st(z), name = cur().name;
     if (z.error) {
-      const c = el('span', 'chip bad', /10000|403|Authentication|permission/i.test(z.error) ? '권한 없음' : '오류');
+      const c = el('span', 'chip bad', /10000|403|Authentication|permission|not authorized/i.test(z.error) ? '권한 없음' : '오류');
       c.title = z.error; tds.append(c);
-    } else if (STATE[z.scan]) {
-      tds.append(el('span', STATE[z.scan].cls, STATE[z.scan].text));
+    } else if (STATE[s]) {
+      tds.append(el('span', STATE[s].cls, STATE[s].text));
       tds.classList.add('tgl');
-      const next = z.scan === 'on' ? false : true;
-      tds.title = z.name + ' — 누르면 ' + (next ? (z.scan === 'diff' ? '지금 조건식으로 업데이트' : 'Scan check 적용') : 'Scan check 제거');
+      const next = s === 'on' ? false : true;
+      tds.title = z.name + ' — 누르면 ' + (next ? (s === 'diff' ? '지금 조건식으로 업데이트' : name + ' 적용') : name + ' 제거');
       tds.onclick = () => {
         if (window.matchMedia('(max-width: 800px)').matches || state.busy) return;
-        const what = next ? (z.scan === 'diff' ? '지금 조건식으로 업데이트합니다' : 'Scan check 를 적용합니다') : 'Scan check 를 제거합니다';
+        const what = next ? (s === 'diff' ? '지금 조건식으로 업데이트합니다' : name + ' 를 적용합니다') : name + ' 를 제거합니다';
         if (!confirm(z.name + '\n' + what + '\n\n진행할까요?')) return;
         runApply([z], next);
       };
@@ -348,7 +379,7 @@ function renderFilter() {
 function renderPanel() {
   renderFilter();
   const cnt = { on: 0, diff: 0, off: 0, unknown: 0 };
-  for (const z of state.zones) cnt[STATE[z.scan] ? z.scan : 'unknown']++;
+  for (const z of state.zones) cnt[STATE[st(z)] ? st(z) : 'unknown']++;
   const c = $('#counts'); c.innerHTML = '';
   const part = (label, n) => { const s = el('span'); s.append(document.createTextNode(label + ' ')); s.append(el('b', null, String(n))); return s; };
   c.append(part('적용', cnt.on), document.createTextNode(' · '), part('업데이트 필요', cnt.diff),
@@ -356,8 +387,8 @@ function renderPanel() {
   if (cnt.unknown) c.append(document.createTextNode(' · '), part('확인 전', cnt.unknown));
 
   const sel = selectedZones();
-  const toApply = sel.filter((z) => z.scan !== 'on');
-  const toRemove = sel.filter((z) => z.scan === 'on' || z.scan === 'diff');
+  const toApply = sel.filter((z) => st(z) !== 'on');
+  const toRemove = sel.filter((z) => st(z) === 'on' || st(z) === 'diff');
   $('#applySub').innerHTML = '';
   $('#applySub').append(el('b', null, String(sel.length)), document.createTextNode('개 도메인 중 '),
     el('b', null, String(toApply.length)), document.createTextNode('개 바뀜'));
@@ -366,9 +397,29 @@ function renderPanel() {
   $('#btnApply').disabled = state.busy || !toApply.length;
   $('#btnRemove').disabled = state.busy || !toRemove.length;
   $('#btnReload').disabled = state.busy;
+  for (const b of $('#rsel').querySelectorAll('button')) b.disabled = state.busy;
 }
 
 function renderAll() { renderTabs(); render(); }
+
+// 규칙 고르기 — 고른 규칙은 브라우저에 기억
+function renderRuleSel() {
+  const box = $('#rsel'); box.innerHTML = '';
+  for (const k of RULE_KEYS) {
+    if (!state.rules[k]) continue;
+    const b = el('button', state.rule === k ? 'on' : '', state.rules[k].name);
+    b.disabled = state.busy;
+    b.onclick = () => {
+      if (state.busy || state.rule === k) return;
+      if (state.exprOpen && norm($('#expr').value) !== norm(cur().expr) && !confirm('저장하지 않은 조건식 변경이 있습니다. 버리고 넘어갈까요?')) return;
+      state.rule = k;
+      try { localStorage.setItem('security.rule', k); } catch { /* 저장 못 해도 화면은 동작 */ }
+      selectAllVisible(); renderRuleSel(); fillExpr(); renderAll();
+    };
+    box.append(b);
+  }
+  $('#rhint').innerHTML = RULE_HINT[state.rule] || '';
+}
 
 function setFresh(text) { $('#freshness').textContent = text; }
 
@@ -396,9 +447,12 @@ async function load() {
   try {
     const d = await api('/api/security');
     state.zones = d.zones; state.groups = d.groups || { order: [], map: {} };
-    state.expr = d.expr; state.defaultExpr = d.defaultExpr; state.canEdit = !!d.canEdit;
+    state.rules = d.rules || { scan: { name: d.ruleName || 'Scan check', expr: d.expr, defaultExpr: d.defaultExpr } };
+    if (!state.rules[state.rule]) state.rule = 'scan';
+    state.canEdit = !!d.canEdit;
     state.maxZones = d.maxZonesPerCall || 5;
     selectAllVisible();
+    renderRuleSel();
     fillExpr();
     renderAll();
     setFresh('도메인 ' + state.zones.length + '개');
@@ -411,7 +465,7 @@ async function load() {
 
 // 각 도메인의 규칙 읽기 — 20개씩 (존마다 1회 호출)
 async function fillStatus(force) {
-  const ids = state.zones.filter((z) => force || z.stale || z.scan == null).map((z) => z.id);
+  const ids = state.zones.filter((z) => force || z.stale || RULE_KEYS.some((k) => state.rules[k] && z[k] == null)).map((z) => z.id);
   if (!ids.length) { setFresh('도메인 ' + state.zones.length + '개'); return; }
   state.busy = true; renderPanel();
   let done = 0, authErr = 0;
@@ -425,8 +479,9 @@ async function fillStatus(force) {
         const z = state.zones.find((x) => x.id === id);
         const s = d.status[id];
         if (!z || !s) continue;
-        z.scan = s.scan; z.others = s.others || []; z.error = s.error || null; z.stale = false;
-        if (z.error && /10000|403|Authentication|permission/i.test(z.error)) authErr++;
+        for (const k of RULE_KEYS) z[k] = s[k];
+        z.others = s.others || []; z.error = s.error || null; z.stale = false;
+        if (z.error && /10000|403|Authentication|permission|not authorized/i.test(z.error)) authErr++;
       }
       done += slice.length;
       render();
@@ -444,15 +499,33 @@ async function fillStatus(force) {
 }
 
 // ── 조건식 ────────────────────────────────────────────────
+// 고른 규칙의 조건식 · 이름을 화면에 채운다. 조건식 칸은 접힌 채로 요약 한 줄만
 function fillExpr() {
+  const r = cur();
+  $('#exprLabel').textContent = r.name + ' 조건';
+  $('#applyMain').textContent = r.name + ' 적용';
+  $('#removeMain').textContent = r.name + ' 제거';
+  const pretty = prettyExpr(r.expr);
+  const n = pretty ? pretty.split('\n').length : 0;
+  const sum = $('#esum'); sum.innerHTML = '';
+  sum.append(document.createTextNode('조건 '), el('b', null, String(n)), document.createTextNode('개 · '),
+    el('b', null, norm(r.expr).length.toLocaleString()), document.createTextNode('자'));
+  if (norm(r.expr) === norm(r.defaultExpr)) sum.append(el('span', 'dim', ' · 기본값'));
   const t = $('#expr');
-  t.value = prettyExpr(state.expr);
-  t.rows = Math.min(t.value.split('\n').length + 1, 32);
+  t.value = pretty;
+  t.rows = Math.min(n + 1, 32);
   t.disabled = !state.canEdit;
   $('#btnExprSave').disabled = true;
-  $('#btnExprDefault').disabled = !state.canEdit || state.expr === state.defaultExpr;
-  if (!state.canEdit) setEmsg('조건식은 관리자(OTP 를 처음 등록한 사람)만 바꿀 수 있습니다.');
+  $('#btnExprDefault').disabled = !state.canEdit || norm(r.expr) === norm(r.defaultExpr);
+  setEmsg(state.canEdit ? '' : '조건식은 관리자(OTP 를 처음 등록한 사람)만 바꿀 수 있습니다.');
+  $('#exprBox').classList.toggle('hide', !state.exprOpen);
+  $('#btnExprToggle').textContent = state.exprOpen ? '조건식 접기 ▴' : '조건식 펼치기 ▾';
 }
+$('#btnExprToggle').onclick = () => {
+  if (state.exprOpen && norm($('#expr').value) !== norm(cur().expr) && !confirm('저장하지 않은 조건식 변경이 있습니다. 버리고 접을까요?')) return;
+  state.exprOpen = !state.exprOpen;
+  fillExpr();
+};
 function setEmsg(text, cls) { const m = $('#emsg'); m.textContent = text || ''; m.className = 'emsg' + (cls ? ' ' + cls : ''); }
 const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 // 저장은 한 줄 — 보여줄 때만 바깥쪽 or 앞에서 줄바꿈 (따옴표 · 괄호 안은 그대로)
@@ -477,18 +550,19 @@ function prettyExpr(s) {
 }
 
 $('#expr').oninput = () => {
-  const dirty = norm($('#expr').value) !== norm(state.expr);
+  const dirty = norm($('#expr').value) !== norm(cur().expr);
   $('#btnExprSave').disabled = !state.canEdit || !dirty || state.busy;
   setEmsg(dirty ? '저장하지 않은 변경이 있습니다.' : '');
 };
 
 async function saveExpr(body, okMsg) {
+  const k = state.rule;
   try {
-    const d = await api('/api/security/expr', { method: 'PUT', body: JSON.stringify(body) });
+    const d = await api('/api/security/expr', { method: 'PUT', body: JSON.stringify(Object.assign({ rule: k }, body)) });
     if (d.changed) {
-      state.expr = d.expr;
+      state.rules[k].expr = d.expr;
       // 조건식이 바뀌었으니 적용돼 있던 도메인은 업데이트 필요
-      for (const z of state.zones) if (z.scan === 'on') z.scan = 'diff';
+      for (const z of state.zones) if (z[k] === 'on') z[k] = 'diff';
       fillExpr(); render();
       setEmsg(okMsg, 'ok');
     } else {
@@ -499,13 +573,14 @@ async function saveExpr(body, okMsg) {
   }
 }
 $('#btnExprSave').onclick = () => {
-  const v = $('#expr').value;
-  if (!confirm('Scan check 조건식을 바꿉니다.\n\n' + prettyExpr(v) + '\n\n저장한 뒤 [Scan check 적용]을 눌러야 각 도메인에 반영됩니다. 진행할까요?')) return;
-  saveExpr({ expr: v }, '저장했습니다 — [Scan check 적용]을 눌러야 각 도메인에 반영됩니다.');
+  const v = $('#expr').value, name = cur().name;
+  if (!confirm(name + ' 조건식을 바꿉니다.\n\n' + prettyExpr(v) + '\n\n저장한 뒤 [' + name + ' 적용]을 눌러야 각 도메인에 반영됩니다. 진행할까요?')) return;
+  saveExpr({ expr: v }, '저장했습니다 — [' + name + ' 적용]을 눌러야 각 도메인에 반영됩니다.');
 };
 $('#btnExprDefault').onclick = () => {
-  if (!confirm('조건식을 기본값으로 되돌립니다.\n\n' + prettyExpr(state.defaultExpr) + '\n\n진행할까요?')) return;
-  saveExpr({ reset: true }, '기본값으로 되돌렸습니다 — [Scan check 적용]을 눌러야 각 도메인에 반영됩니다.');
+  const name = cur().name;
+  if (!confirm(name + ' 조건식을 기본값으로 되돌립니다.\n\n' + prettyExpr(cur().defaultExpr) + '\n\n진행할까요?')) return;
+  saveExpr({ reset: true }, '기본값으로 되돌렸습니다 — [' + name + ' 적용]을 눌러야 각 도메인에 반영됩니다.');
 };
 
 // ── 적용 · 제거 ────────────────────────────────────────────
@@ -513,20 +588,21 @@ $('#btnExprDefault').onclick = () => {
 async function runApply(zones, value) {
   const list = zones.map((z) => ({ id: z.id, name: z.name }));
   if (!list.length) return;
+  const rule = state.rule, name = cur().name;
   state.busy = true; renderPanel();
-  const title = value ? 'Scan check 적용 중…' : 'Scan check 제거 중…';
+  const title = name + (value ? ' 적용 중…' : ' 제거 중…');
   let changed = 0, same = 0;
   const fails = [];
   showOverlay(title, 0, list.length);
   try {
     for (let i = 0; i < list.length; i += state.maxZones) {
       const slice = list.slice(i, i + state.maxZones);
-      const d = await post('/api/security/apply', { zones: slice, value });
+      const d = await post('/api/security/apply', { rule, zones: slice, value });
       showOverlay(title, Math.min(i + slice.length, list.length), list.length);
       for (const r of d.result) {
         const z = state.zones.find((x) => x.id === r.zoneId);
         if (r.ok) {
-          if (z) { z.scan = r.scan; z.others = r.others || []; z.error = null; }
+          if (z) { for (const k of RULE_KEYS) if (r[k] !== undefined) z[k] = r[k]; z.others = r.others || []; z.error = null; }
           r.changed ? changed++ : same++;
         } else {
           fails.push(r.zone + ' — ' + r.error);
@@ -545,21 +621,21 @@ async function runApply(zones, value) {
     state.busy = false; hideOverlay(); renderPanel();
   }
   // DNS · SSL/TLS 와 같이 — 결과는 제목 아래 줄에, 실패가 있을 때만 알림창
-  setFresh((value ? 'Scan check 적용' : 'Scan check 제거') + ' 완료 — ' + changed + '개 변경' +
+  setFresh(name + (value ? ' 적용' : ' 제거') + ' 완료 — ' + changed + '개 변경' +
     (same ? ', ' + same + '개 그대로' : '') + (fails.length ? ', ' + fails.length + '개 실패' : ''));
   if (fails.length) alert(fails.length + '개 실패\n\n' + fails.slice(0, 20).join('\n'));
 }
 
 $('#btnApply').onclick = () => {
-  const zs = selectedZones().filter((z) => z.scan !== 'on');
+  const zs = selectedZones().filter((z) => st(z) !== 'on');
   if (!zs.length) return;
-  if (!confirm('체크한 도메인 중 ' + zs.length + '개에 Scan check 를 적용합니다 (이미 있으면 지금 조건식으로 업데이트).\n\n' + state.expr + '\n\n진행할까요?')) return;
+  if (!confirm('체크한 도메인 중 ' + zs.length + '개에 ' + cur().name + ' 를 적용합니다 (이미 있으면 지금 조건식으로 업데이트).\n\n' + prettyExpr(cur().expr) + '\n\n진행할까요?')) return;
   runApply(zs, true);
 };
 $('#btnRemove').onclick = () => {
-  const zs = selectedZones().filter((z) => z.scan === 'on' || z.scan === 'diff');
+  const zs = selectedZones().filter((z) => st(z) === 'on' || st(z) === 'diff');
   if (!zs.length) return;
-  if (!confirm('체크한 도메인 중 ' + zs.length + '개에서 Scan check 를 제거합니다. 다른 규칙은 그대로 둡니다.\n\n진행할까요?')) return;
+  if (!confirm('체크한 도메인 중 ' + zs.length + '개에서 ' + cur().name + ' 를 제거합니다. 다른 규칙은 그대로 둡니다.\n\n진행할까요?')) return;
   runApply(zs, false);
 };
 $('#btnReload').onclick = () => { if (!state.busy) fillStatus(true); };

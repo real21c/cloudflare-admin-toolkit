@@ -15,6 +15,7 @@ const ICON = {
   list: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   help: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.9M12 17h.01"/></svg>',
+  bucket: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>',
   lock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
 };
 const MENU = [
@@ -22,6 +23,7 @@ const MENU = [
   { key: 'domains', href: '/', label: 'DNS · SSL/TLS', icon: ICON.globe },
   { key: 'ip', href: '/ip.html', label: 'IP Rules', icon: ICON.shield },
   { key: 'security', href: '/security.html', label: 'Security', icon: ICON.lock },
+  { key: 'r2', href: '/r2.html', label: 'R2 Clean up', icon: ICON.bucket },
   { sec: '기록' },
   { key: 'log', href: '/#log', label: '변경 이력', icon: ICON.list },
   { sec: '시스템' },
@@ -34,6 +36,7 @@ export function currentMenu() {
   const p = location.pathname;
   if (p === '/ip.html' || p === '/ip') return 'ip'; // Workers 는 /ip.html 을 /ip 로 돌려보낸다
   if (p === '/security.html' || p === '/security') return 'security';
+  if (p === '/r2.html' || p === '/r2') return 'r2';
   if (p === '/settings.html' || p === '/settings') return 'settings';
   if (p === '/help.html' || p === '/help') return 'help';
   if (isIndex(p)) return location.hash === '#log' ? 'log' : 'domains';
