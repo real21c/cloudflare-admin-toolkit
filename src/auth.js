@@ -98,7 +98,7 @@ export function loginPage(message, otpOn) {
     --bg:#1d1d1d; --panel:#262626; --line:#3a3a3a; --text:#e3e3e3; --dim:#a5a5a5;
     --blue:#6ba4ff; --red:#f06a6c; --redbg:#301718; } }
   *{box-sizing:border-box} html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--text);display:flex;align-items:center;
+  body{margin:0;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;
        justify-content:center;font:400 14px/1.5 -apple-system,"Segoe UI","Malgun Gothic",sans-serif}
   form{background:var(--panel);border:1px solid var(--line);padding:28px;width:340px;max-width:92vw}
   .logo{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px;margin-bottom:20px}
@@ -110,6 +110,9 @@ export function loginPage(message, otpOn) {
   button{width:100%;height:38px;margin-top:14px;font:inherit;font-weight:600;
          background:var(--blue);color:#fff;border:none;border-radius:0;cursor:pointer}
   .err{background:var(--redbg);color:var(--red);padding:9px 11px;margin-bottom:14px;font-size:13px}
+  .by{display:flex;align-items:center;gap:5px;margin-top:14px;font-size:12px;color:var(--dim)}
+  .by a{display:inline-flex;align-items:center;gap:6px;color:var(--dim);text-decoration:none}
+  .by a:hover{color:var(--text)} .by svg{fill:currentColor}
 </style></head><body>
 <form method="POST" action="/login">
   <div class="logo">
@@ -123,5 +126,6 @@ export function loginPage(message, otpOn) {
   <input id="o" name="otp" autocomplete="one-time-code" maxlength="10" placeholder="6 digits, or a recovery code">` : ''}
   <button type="submit">Sign in</button>
 </form>
+<div class="by"><a href="https://github.com/real21c/cloudflare-admin-toolkit" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>cloudflare-admin-toolkit</a> by <a href="https://github.com/real21c" target="_blank" rel="noopener">real21c</a></div>
 </body></html>`;
 }
