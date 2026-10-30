@@ -17,6 +17,7 @@
   --line-soft: #ececec;
   --text: #313131;
   --dim: #6b6b6b;
+  --yellow: #b8860b;
   --dimmer: #949494;
 
   --green: #00a170;
@@ -39,6 +40,7 @@
     --line-soft: #333333;
     --text: #e3e3e3;
     --dim: #a5a5a5;
+    --yellow: #f5c518;
     --dimmer: #7c7c7c;
 
     --cf-orange-bg: #3a2610;
@@ -63,6 +65,7 @@
   --line-soft: #333333;
   --text: #e3e3e3;
   --dim: #a5a5a5;
+  --yellow: #f5c518;
   --dimmer: #7c7c7c;
 
   --cf-orange-bg: #3a2610;
@@ -230,6 +233,14 @@ button.danger:hover:not(:disabled) { border-color: var(--red); }
   background: transparent; border-color: transparent;
 }
 .side-tg:hover { color: var(--text); border-color: var(--line); }
+/* 메뉴 맨 아래 — 리포 · 만든 사람 링크 (좁으면 'by real21c' 가 다음 줄로) */
+.side-by { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; padding: 8px 14px 4px; font-size: 11.5px; color: var(--dim); }
+.side .side-by a { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; font-size: inherit; color: var(--dim); background: none; }
+.side .side-by a:hover { color: var(--text); background: none; }
+.side .side-by a.me { color: var(--text); }
+.side .side-by a.me:hover { color: var(--yellow); }
+.side .side-by svg { color: inherit; fill: currentColor; }
+.side-by .by-who { white-space: nowrap; }
 /* 접힌 상태 — 아이콘만 남는 좁은 레일 */
 body.side-collapsed .side { flex: 0 0 56px; }
 body.side-collapsed .side a span { display: none; }
@@ -237,6 +248,8 @@ body.side-collapsed .side a { justify-content: center; padding: 11px 0; }
 body.side-collapsed .side .sec { visibility: hidden; height: 10px; padding: 6px 0 0; }
 body.side-collapsed .side .demo-note { display: none; }
 body.side-collapsed .side-foot { padding-left: 0; padding-right: 0; flex-direction: column; align-items: center; }
+body.side-collapsed .side-by { justify-content: center; padding-left: 0; padding-right: 0; }
+body.side-collapsed .side-by .by-who { display: none; }
 /* 모바일 — 메뉴는 가로 스크롤 대신 왼쪽 드로어(☰)로 연다 */
 @media (max-width: 800px) {
   .topbar {
